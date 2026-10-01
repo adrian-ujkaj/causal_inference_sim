@@ -1,0 +1,12 @@
+# pybullet : sous Windows, l'installer via conda-forge (voir setup_windows.bat)
+pybullet
+numpy
+scipy
+pyzmq
+pyyaml
+pathfinding
+gymnasium
+matplotlib
+pandas
+# gym-pybullet-drones (pas sur PyPI) :
+# pip install --no-deps https://github.com/utiasDSL/gym-pybullet-drones/archive/refs/heads/main.zip

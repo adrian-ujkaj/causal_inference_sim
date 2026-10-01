@@ -225,6 +225,11 @@ class UAV(Agent):
         self.gnss_delay_mean = sens.get("gnss", {}).get("delay_mean", 0.1)
         self.gnss_delay_std = sens.get("gnss", {}).get("delay_std", 0.01)
         self.next_gnss_trigger = 0.0
+
+        # Nominal GNSS schedule (no long-term drift) + latest raw measurement cache
+        self.last_gnss_nominal_time = 0.0
+        self.last_gnss_meas_pos = np.array(self.start_pos, dtype=np.float32)
+        self.last_gnss_meas_vel = np.zeros(3, dtype=np.float32)
         
         # --- WIND ---
         # Backward compatible parsing:
@@ -259,6 +264,8 @@ class UAV(Agent):
                 "gt_vx", "gt_vy", "gt_vz",      
                 "meas_x", "meas_y", "meas_z",  # Sensors
                 "gnss_error_mag",
+                "ekf_x", "ekf_y", "ekf_z",
+                "ekf_pos_error_mag",
                 "wind_x", "wind_y", "wind_z",  # Environment
                 "wind_mag",
                 "rep_force_mag",                # Interaction
@@ -726,35 +733,18 @@ class UAV(Agent):
 
         # ==================== ADVANCED SENSOR FUSION ====================
         
-        # 1. Read Sensors (Noisy)
-        if (self._sim_time - self.last_gnss_update_time) >= self.gnss_dt:
-            meas_pos, meas_vel = self.gnss.measure(gt["pos"], gt["vel"])
-            self.ekf.update(meas_pos, meas_vel)
-            self.last_gnss_update_time = self._sim_time
-        
+        # 1. GNSS measurement (jittered schedule) + EKF update
+        # IMPORTANT: meas_* in logs are the raw GNSS outputs. EKF is logged separately.
         if self._sim_time >= self.next_gnss_trigger:
-            # 1. Measurement and EKF Update (unchanged)
-            meas_pos, meas_vel = self.gnss.measure(gt["pos"], gt["vel"])
+            meas_pos, meas_vel = self.gnss.measure(gt["pos"], gt["vel"], t=self._sim_time)
+            self.last_gnss_meas_pos = np.array(meas_pos, dtype=np.float32)
+            self.last_gnss_meas_vel = np.array(meas_vel, dtype=np.float32)
             self.ekf.update(meas_pos, meas_vel)
-    
-            # 2. Calculate next update time
-            # Keep the theoretical base stable (self.next_gnss_update_time + self.gnss_dt)
-            # Add jitter only for triggering
-    
-            # Example: +/- 10% variation on period
-            jitter = max(0, random.gauss(self.gnss_delay_mean, self.gnss_delay_std))
-    
-            # IMPORTANT: Increment theoretical target to avoid drift
-            # If we just did self._sim_time + dt, we'd accumulate noise delay.
-            # Here, we restart from the previous theoretical scheduled time.
-    
-            # If it's the first time or to reset the theoretical base 
-            # RECOMMENDED AND SIMPLER METHOD (No long-term drift):
-            # Update theoretical GNSS update time
-            self.last_gnss_update_time += self.gnss_dt
-    
-            # But next "check" will happen with an offset
-            self.next_gnss_trigger = self.last_gnss_update_time + jitter
+
+            # Next trigger: nominal period + random positive jitter (no drift)
+            jitter = max(0.0, random.gauss(self.gnss_delay_mean, self.gnss_delay_std))
+            self.last_gnss_nominal_time = max(self.last_gnss_nominal_time + self.gnss_dt, self._sim_time)
+            self.next_gnss_trigger = self.last_gnss_nominal_time + jitter
 
         # Read the IMU (Acceleration + Orientation)
         # Note: In simple PyBullet, you can cheat and take gt['orn_q']
@@ -953,10 +943,12 @@ class UAV(Agent):
         if len(p.getContactPoints(self.bodyId)) > 0:
             collision_flag = 1
         
-        meas_pos = self.ekf.x[:3]
+        meas_pos = np.array(self.last_gnss_meas_pos, dtype=np.float32)
+        ekf_pos = np.array(self.ekf.x[:3], dtype=np.float32)
         
         # Derived metrics
         gnss_error = np.linalg.norm(np.array(meas_pos) - np.array(gt["pos"]))
+        ekf_error = np.linalg.norm(np.array(ekf_pos) - np.array(gt["pos"]))
         wind_mag = np.linalg.norm(self.current_wind)
         tracking_error = np.linalg.norm(np.array(gt["pos"]) - np.array(self.current_target_pos))
 
@@ -968,6 +960,8 @@ class UAV(Agent):
                 # Sensors
                 *meas_pos,
                 gnss_error,
+                *ekf_pos,
+                ekf_error,
                 # Environment
                 *self.current_wind,
                 wind_mag,

@@ -57,7 +57,7 @@ agents:
     urdf_path: "assets/quadrotor.urdf"
     body_id: 0001
     mass: 0.027
-    start_pos: [-0.5, -0.5, 0.0] 
+    start_pos: [-1, -1, 0.0] 
     start_orn_euler: [0.0, 0.0, 0.0]
     waypoints: []
     ctrl_freq: 80
@@ -80,7 +80,7 @@ agents:
     urdf_path: "assets/quadrotor.urdf"
     body_id: 0002
     mass: 0.027
-    start_pos: [-0.5, 0.5, 0.0] 
+    start_pos: [-1, 1, 0.0] 
     start_orn_euler: [0.0, 0.0, 0.0]
     waypoints: []
     ctrl_freq: 80
@@ -103,7 +103,7 @@ agents:
     urdf_path: "assets/quadrotor.urdf"
     body_id: 0003
     mass: 0.027
-    start_pos: [-1.0, 0.0, 0.0]
+    start_pos: [-2.0, 0.0, 0.0]
     start_orn_euler: [0.0, 0.0, 0.0]
     waypoints: [[-5.0,0,0],[-5.0,0,10]]
     safety_radius: 0.35

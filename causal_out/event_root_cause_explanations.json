@@ -1,0 +1,2682 @@
+[
+  {
+    "event": "formation_loss",
+    "time": 1.0399999618530273,
+    "t_index": 24,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.8583835363388062,
+    "cause_probabilities": {
+      "wind": 0.3875548541545868,
+      "gnss": 0.11180221289396286,
+      "interaction": 0.3041379451751709,
+      "formation_tracking": 0.19650498032569885
+    },
+    "raw_group_scores": {
+      "wind": 1.2528527930749187,
+      "gnss": 0.009726748455040377,
+      "interaction": 1.0104768002871063,
+      "formation_tracking": 0.573683208746035
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.0820000171661377,
+    "t_index": 25,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.8171566724777222,
+    "cause_probabilities": {
+      "wind": 0.21140028536319733,
+      "gnss": 0.1338150054216385,
+      "interaction": 0.4142415225505829,
+      "formation_tracking": 0.2405432015657425
+    },
+    "raw_group_scores": {
+      "wind": 0.4572951231321851,
+      "gnss": 0.0,
+      "interaction": 1.1299909032097404,
+      "formation_tracking": 0.5864414863503771
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.1230000257492065,
+    "t_index": 26,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.8690708875656128,
+    "cause_probabilities": {
+      "wind": 0.1763809621334076,
+      "gnss": 0.1396317183971405,
+      "interaction": 0.43708187341690063,
+      "formation_tracking": 0.24690543115139008
+    },
+    "raw_group_scores": {
+      "wind": 0.2584056390295083,
+      "gnss": 0.024767831597254344,
+      "interaction": 1.1658799057497005,
+      "formation_tracking": 0.5947647853654354
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.1649999618530273,
+    "t_index": 27,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9767917394638062,
+    "cause_probabilities": {
+      "wind": 0.19440858066082,
+      "gnss": 0.0826725885272026,
+      "interaction": 0.545883297920227,
+      "formation_tracking": 0.17703554034233093
+    },
+    "raw_group_scores": {
+      "wind": 0.8550740380439441,
+      "gnss": 0.0,
+      "interaction": 1.8875170482500034,
+      "formation_tracking": 0.7614622428123876
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.2059999704360962,
+    "t_index": 28,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9884141683578491,
+    "cause_probabilities": {
+      "wind": 0.3874313533306122,
+      "gnss": 0.07435916364192963,
+      "interaction": 0.2572445273399353,
+      "formation_tracking": 0.2809649109840393
+    },
+    "raw_group_scores": {
+      "wind": 1.6506318145738672,
+      "gnss": 0.0,
+      "interaction": 1.2411202767526721,
+      "formation_tracking": 1.3293229919439797
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.2480000257492065,
+    "t_index": 29,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9814097285270691,
+    "cause_probabilities": {
+      "wind": 0.0768069326877594,
+      "gnss": 0.07400369644165039,
+      "interaction": 0.35847657918930054,
+      "formation_tracking": 0.49071282148361206
+    },
+    "raw_group_scores": {
+      "wind": 0.059516148265132074,
+      "gnss": 0.022336534410060165,
+      "interaction": 1.600084629888689,
+      "formation_tracking": 1.9140803705182434
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.2480000257492065,
+    "t_index": 29,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.32857173681259155,
+    "cause_probabilities": {
+      "wind": 0.1977541297674179,
+      "gnss": 0.1977541297674179,
+      "interaction": 0.3004894256591797,
+      "formation_tracking": 0.3040023446083069
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.4183879942670058,
+      "formation_tracking": 0.4300109489204389
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.2899999618530273,
+    "t_index": 30,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.6042419075965881,
+    "cause_probabilities": {
+      "wind": 0.08163835108280182,
+      "gnss": 0.08163835108280182,
+      "interaction": 0.6786429286003113,
+      "formation_tracking": 0.15808036923408508
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 2.117796025936163,
+      "formation_tracking": 0.6608045193223933
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.2899999618530273,
+    "t_index": 30,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9811293482780457,
+    "cause_probabilities": {
+      "wind": 0.052323028445243835,
+      "gnss": 0.052323028445243835,
+      "interaction": 0.26669010519981384,
+      "formation_tracking": 0.6286637783050537
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 1.6286507466323288,
+      "formation_tracking": 2.4861600709408513
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.2899999618530273,
+    "t_index": 30,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.5508947372436523,
+    "cause_probabilities": {
+      "wind": 0.24461087584495544,
+      "gnss": 0.20087973773479462,
+      "interaction": 0.2618710994720459,
+      "formation_tracking": 0.29263827204704285
+    },
+    "raw_group_scores": {
+      "wind": 0.2584056390295083,
+      "gnss": 0.061443339184702225,
+      "interaction": 0.3265893479304792,
+      "formation_tracking": 0.4376741716328932
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.3309999704360962,
+    "t_index": 31,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.6894395351409912,
+    "cause_probabilities": {
+      "wind": 0.0823470875620842,
+      "gnss": 0.0823470875620842,
+      "interaction": 0.6757379174232483,
+      "formation_tracking": 0.15956789255142212
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 2.1048623033760836,
+      "formation_tracking": 0.6615264687851746
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.3309999704360962,
+    "t_index": 31,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9927152991294861,
+    "cause_probabilities": {
+      "wind": 0.03542027994990349,
+      "gnss": 0.0359867662191391,
+      "interaction": 0.18989254534244537,
+      "formation_tracking": 0.7387003898620605
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.015866812291841725,
+      "interaction": 1.6791737965681068,
+      "formation_tracking": 3.037607995958824
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.3309999704360962,
+    "t_index": 31,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.6432456970214844,
+    "cause_probabilities": {
+      "wind": 0.2736353576183319,
+      "gnss": 0.19889280200004578,
+      "interaction": 0.22881852090358734,
+      "formation_tracking": 0.2986533045768738
+    },
+    "raw_group_scores": {
+      "wind": 0.3578504210510428,
+      "gnss": 0.03881990665946712,
+      "interaction": 0.17898322406265837,
+      "formation_tracking": 0.44533736236955407
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.3730000257492065,
+    "t_index": 32,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8027493953704834,
+    "cause_probabilities": {
+      "wind": 0.07351509481668472,
+      "gnss": 0.07351509481668472,
+      "interaction": 0.7118759155273438,
+      "formation_tracking": 0.14109385013580322
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 2.2704130364833213,
+      "formation_tracking": 0.6519345621438257
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.3730000257492065,
+    "t_index": 32,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9981797337532043,
+    "cause_probabilities": {
+      "wind": 0.03598397597670555,
+      "gnss": 0.023215463384985924,
+      "interaction": 0.14122740924358368,
+      "formation_tracking": 0.7995731234550476
+    },
+    "raw_group_scores": {
+      "wind": 0.4572951231321851,
+      "gnss": 0.019039860197576988,
+      "interaction": 1.8245925403121628,
+      "formation_tracking": 3.5582993395851497
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.3730000257492065,
+    "t_index": 32,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.5596345067024231,
+    "cause_probabilities": {
+      "wind": 0.2108519822359085,
+      "gnss": 0.21293045580387115,
+      "interaction": 0.2445523589849472,
+      "formation_tracking": 0.3316652178764343
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.009809167179863389,
+      "interaction": 0.14827308704927963,
+      "formation_tracking": 0.452969632514023
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.4140000343322754,
+    "t_index": 33,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8734968304634094,
+    "cause_probabilities": {
+      "wind": 0.07926970720291138,
+      "gnss": 0.07805339992046356,
+      "interaction": 0.6993319988250732,
+      "formation_tracking": 0.1433449387550354
+    },
+    "raw_group_scores": {
+      "wind": 0.059516148265132074,
+      "gnss": 0.04405337876710816,
+      "interaction": 2.236785540959471,
+      "formation_tracking": 0.6519139697328933
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.4140000343322754,
+    "t_index": 33,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9982584118843079,
+    "cause_probabilities": {
+      "wind": 0.016232196241617203,
+      "gnss": 0.015294305048882961,
+      "interaction": 0.08990681171417236,
+      "formation_tracking": 0.8785666823387146
+    },
+    "raw_group_scores": {
+      "wind": 0.059516148265132074,
+      "gnss": 0.0,
+      "interaction": 1.7712930690232545,
+      "formation_tracking": 4.050811474650546
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.4140000343322754,
+    "t_index": 33,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.6049074530601501,
+    "cause_probabilities": {
+      "wind": 0.2063254565000534,
+      "gnss": 0.21592919528484344,
+      "interaction": 0.24671097099781036,
+      "formation_tracking": 0.3310343623161316
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.04549567737022969,
+      "interaction": 0.17876263903012188,
+      "formation_tracking": 0.47276731138556555
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.4600000381469727,
+    "t_index": 34,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8794243931770325,
+    "cause_probabilities": {
+      "wind": 0.07669060677289963,
+      "gnss": 0.08003899455070496,
+      "interaction": 0.696121335029602,
+      "formation_tracking": 0.147148996591568
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.04273470765772561,
+      "interaction": 2.205744789947636,
+      "formation_tracking": 0.6516664131405976
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.4600000381469727,
+    "t_index": 34,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9992460608482361,
+    "cause_probabilities": {
+      "wind": 0.015942594036459923,
+      "gnss": 0.010308032855391502,
+      "interaction": 0.055037133395671844,
+      "formation_tracking": 0.9187122583389282
+    },
+    "raw_group_scores": {
+      "wind": 0.4572951231321851,
+      "gnss": 0.02122390833224854,
+      "interaction": 1.6963086267070036,
+      "formation_tracking": 4.511273609873255
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.4600000381469727,
+    "t_index": 34,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.8543960452079773,
+    "cause_probabilities": {
+      "wind": 0.2474813163280487,
+      "gnss": 0.16611512005329132,
+      "interaction": 0.19267608225345612,
+      "formation_tracking": 0.39372748136520386
+    },
+    "raw_group_scores": {
+      "wind": 0.4572951231321851,
+      "gnss": 0.05864116189027323,
+      "interaction": 0.20697051476738215,
+      "formation_tracking": 0.9216190498966366
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.5019999742507935,
+    "t_index": 35,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8450643420219421,
+    "cause_probabilities": {
+      "wind": 0.09134585410356522,
+      "gnss": 0.09450487047433853,
+      "interaction": 0.6418222784996033,
+      "formation_tracking": 0.17232707142829895
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.03399851986700367,
+      "interaction": 1.9496585483169095,
+      "formation_tracking": 0.6347413699017865
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.5019999742507935,
+    "t_index": 35,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.998753011226654,
+    "cause_probabilities": {
+      "wind": 0.006668011657893658,
+      "gnss": 0.006668011657893658,
+      "interaction": 0.034071099013090134,
+      "formation_tracking": 0.9525928497314453
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 1.6311278403372322,
+      "formation_tracking": 4.961865788040402
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.5019999742507935,
+    "t_index": 35,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.804630696773529,
+    "cause_probabilities": {
+      "wind": 0.13420291244983673,
+      "gnss": 0.13918201625347137,
+      "interaction": 0.169898122549057,
+      "formation_tracking": 0.5567169189453125
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.03642981942817999,
+      "interaction": 0.2358461631294334,
+      "formation_tracking": 1.422704121510238
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.5429999828338623,
+    "t_index": 36,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8390256762504578,
+    "cause_probabilities": {
+      "wind": 0.1127733439207077,
+      "gnss": 0.1127733439207077,
+      "interaction": 0.5617201328277588,
+      "formation_tracking": 0.2127332091331482
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 1.6056237258070651,
+      "formation_tracking": 0.6346588084032968
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.5429999828338623,
+    "t_index": 36,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9995213747024536,
+    "cause_probabilities": {
+      "wind": 0.005503357388079166,
+      "gnss": 0.004821780137717724,
+      "interaction": 0.022433415055274963,
+      "formation_tracking": 0.9672414064407349
+    },
+    "raw_group_scores": {
+      "wind": 0.15896093694836597,
+      "gnss": 0.026745838261328172,
+      "interaction": 1.5641542061586697,
+      "formation_tracking": 5.328050475007241
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.5429999828338623,
+    "t_index": 36,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9014599323272705,
+    "cause_probabilities": {
+      "wind": 0.10638376325368881,
+      "gnss": 0.10392160713672638,
+      "interaction": 0.13009566068649292,
+      "formation_tracking": 0.6595989465713501
+    },
+    "raw_group_scores": {
+      "wind": 0.059516148265132074,
+      "gnss": 0.036100149276852206,
+      "interaction": 0.2607331740148041,
+      "formation_tracking": 1.8840953235109135
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.5850000381469727,
+    "t_index": 37,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8815097212791443,
+    "cause_probabilities": {
+      "wind": 0.1162327229976654,
+      "gnss": 0.1162327229976654,
+      "interaction": 0.5526125431060791,
+      "formation_tracking": 0.2149220108985901
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 1.5590626908554903,
+      "formation_tracking": 0.6146808443163808
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.5850000381469727,
+    "t_index": 37,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.999728798866272,
+    "cause_probabilities": {
+      "wind": 0.004763785284012556,
+      "gnss": 0.003406527452170849,
+      "interaction": 0.015734555199742317,
+      "formation_tracking": 0.9760950803756714
+    },
+    "raw_group_scores": {
+      "wind": 0.3578504210510428,
+      "gnss": 0.022501367111741916,
+      "interaction": 1.5526671761101778,
+      "formation_tracking": 5.680367852262863
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.5850000381469727,
+    "t_index": 37,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9441802501678467,
+    "cause_probabilities": {
+      "wind": 0.08358991891145706,
+      "gnss": 0.073309987783432,
+      "interaction": 0.09479319304227829,
+      "formation_tracking": 0.748306930065155
+    },
+    "raw_group_scores": {
+      "wind": 0.15896093694836597,
+      "gnss": 0.02773483921938295,
+      "interaction": 0.2847353470456484,
+      "formation_tracking": 2.3508510530026583
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.6269999742507935,
+    "t_index": 38,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8823271989822388,
+    "cause_probabilities": {
+      "wind": 0.11885423213243484,
+      "gnss": 0.12464815378189087,
+      "interaction": 0.5365854501724243,
+      "formation_tracking": 0.21991218626499176
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.04759730678007824,
+      "interaction": 1.507327983747529,
+      "formation_tracking": 0.6153306563893121
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.6269999742507935,
+    "t_index": 38,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9997082352638245,
+    "cause_probabilities": {
+      "wind": 0.002432416658848524,
+      "gnss": 0.002462373347952962,
+      "interaction": 0.011232186108827591,
+      "formation_tracking": 0.9838730692863464
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.012240469115021841,
+      "interaction": 1.5298984439058736,
+      "formation_tracking": 6.0026115860947185
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.6269999742507935,
+    "t_index": 38,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9633089303970337,
+    "cause_probabilities": {
+      "wind": 0.05231495946645737,
+      "gnss": 0.05108102783560753,
+      "interaction": 0.06708360463380814,
+      "formation_tracking": 0.8295204043388367
+    },
+    "raw_group_scores": {
+      "wind": 0.059516148265132074,
+      "gnss": 0.03564685875373186,
+      "interaction": 0.30817347307465137,
+      "formation_tracking": 2.8230814772580386
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.6679999828338623,
+    "t_index": 39,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8825865387916565,
+    "cause_probabilities": {
+      "wind": 0.12331699579954147,
+      "gnss": 0.12644588947296143,
+      "interaction": 0.5218697786331177,
+      "formation_tracking": 0.22836728394031525
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.02505628941869294,
+      "interaction": 1.442659828778021,
+      "formation_tracking": 0.6161970085349671
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.6679999828338623,
+    "t_index": 39,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9998273253440857,
+    "cause_probabilities": {
+      "wind": 0.002355953911319375,
+      "gnss": 0.0018865765305235982,
+      "interaction": 0.007363317534327507,
+      "formation_tracking": 0.9883941411972046
+    },
+    "raw_group_scores": {
+      "wind": 0.2584056390295083,
+      "gnss": 0.036223776770591194,
+      "interaction": 1.3979706344368563,
+      "formation_tracking": 6.297541643440037
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.6679999828338623,
+    "t_index": 39,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9708696603775024,
+    "cause_probabilities": {
+      "wind": 0.03273603692650795,
+      "gnss": 0.033826302736997604,
+      "interaction": 0.04560116305947304,
+      "formation_tracking": 0.8878365159034729
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0327622686694352,
+      "interaction": 0.3314566255170333,
+      "formation_tracking": 3.3003111254787774
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.7100000381469727,
+    "t_index": 40,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.9314804673194885,
+    "cause_probabilities": {
+      "wind": 0.15553799271583557,
+      "gnss": 0.14271198213100433,
+      "interaction": 0.4600847661495209,
+      "formation_tracking": 0.24166518449783325
+    },
+    "raw_group_scores": {
+      "wind": 0.15896093694836597,
+      "gnss": 0.07289928435803907,
+      "interaction": 1.2434816917131102,
+      "formation_tracking": 0.5996241082078256
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.7100000381469727,
+    "t_index": 40,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9997603297233582,
+    "cause_probabilities": {
+      "wind": 0.0014428339200094342,
+      "gnss": 0.0014880639500916004,
+      "interaction": 0.005808045156300068,
+      "formation_tracking": 0.9912610650062561
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.03086667954319331,
+      "interaction": 1.3926347018958392,
+      "formation_tracking": 6.532368565060078
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.7100000381469727,
+    "t_index": 40,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9788004755973816,
+    "cause_probabilities": {
+      "wind": 0.021102476865053177,
+      "gnss": 0.021242979913949966,
+      "interaction": 0.030096514150500298,
+      "formation_tracking": 0.9275580644607544
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.006636118680632593,
+      "interaction": 0.35501880707168265,
+      "formation_tracking": 3.783165038906496
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.7510000467300415,
+    "t_index": 41,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.9405008554458618,
+    "cause_probabilities": {
+      "wind": 0.17208550870418549,
+      "gnss": 0.141134113073349,
+      "interaction": 0.4231410622596741,
+      "formation_tracking": 0.263639360666275
+    },
+    "raw_group_scores": {
+      "wind": 0.2584056390295083,
+      "gnss": 0.060124668075319666,
+      "interaction": 1.158119672213653,
+      "formation_tracking": 0.6849961510082743
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.7510000467300415,
+    "t_index": 41,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.999940812587738,
+    "cause_probabilities": {
+      "wind": 0.002421921817585826,
+      "gnss": 0.0011645086342468858,
+      "interaction": 0.004686219152063131,
+      "formation_tracking": 0.991727352142334
+    },
+    "raw_group_scores": {
+      "wind": 0.7556292560224095,
+      "gnss": 0.023366745324021984,
+      "interaction": 1.4156938782260902,
+      "formation_tracking": 6.770515993411579
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.7510000467300415,
+    "t_index": 41,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9929079413414001,
+    "cause_probabilities": {
+      "wind": 0.014093463309109211,
+      "gnss": 0.014016298577189445,
+      "interaction": 0.01939709670841694,
+      "formation_tracking": 0.9524931311607361
+    },
+    "raw_group_scores": {
+      "wind": 0.059516148265132074,
+      "gnss": 0.05402581775539857,
+      "interaction": 0.378928305769967,
+      "formation_tracking": 4.272887814399786
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.7929999828338623,
+    "t_index": 42,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8660652041435242,
+    "cause_probabilities": {
+      "wind": 0.15339621901512146,
+      "gnss": 0.15851812064647675,
+      "interaction": 0.3627340793609619,
+      "formation_tracking": 0.3253515362739563
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.03284468620726714,
+      "interaction": 0.8606457930892062,
+      "formation_tracking": 0.7518819400161711
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.7929999828338623,
+    "t_index": 42,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9998820424079895,
+    "cause_probabilities": {
+      "wind": 0.0009574220748618245,
+      "gnss": 0.0009736968204379082,
+      "interaction": 0.0034915031865239143,
+      "formation_tracking": 0.9945774078369141
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.016855813249896504,
+      "interaction": 1.2938434442900906,
+      "formation_tracking": 6.945828724843017
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.7929999828338623,
+    "t_index": 42,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9933435320854187,
+    "cause_probabilities": {
+      "wind": 0.008194765076041222,
+      "gnss": 0.008442604914307594,
+      "interaction": 0.012263613753020763,
+      "formation_tracking": 0.9710990190505981
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.02979525867332445,
+      "interaction": 0.4031408525700362,
+      "formation_tracking": 4.774932623559108
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.8350000381469727,
+    "t_index": 43,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8889374136924744,
+    "cause_probabilities": {
+      "wind": 0.15229550004005432,
+      "gnss": 0.15229550004005432,
+      "interaction": 0.3629368245601654,
+      "formation_tracking": 0.3324721157550812
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.8684060266252537,
+      "formation_tracking": 0.7807332894275056
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.8350000381469727,
+    "t_index": 43,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999123811721802,
+    "cause_probabilities": {
+      "wind": 0.0008016893989406526,
+      "gnss": 0.0008052002522163093,
+      "interaction": 0.003110156860202551,
+      "formation_tracking": 0.9952829480171204
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.004369653898372398,
+      "interaction": 1.3557070908983575,
+      "formation_tracking": 7.124061042917667
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.8350000381469727,
+    "t_index": 43,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.996920108795166,
+    "cause_probabilities": {
+      "wind": 0.004919101949781179,
+      "gnss": 0.004919101949781179,
+      "interaction": 0.007546202279627323,
+      "formation_tracking": 0.98261559009552
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.42791864412740804,
+      "formation_tracking": 5.297092181027878
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.8760000467300415,
+    "t_index": 44,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8605154156684875,
+    "cause_probabilities": {
+      "wind": 0.16200515627861023,
+      "gnss": 0.16200515627861023,
+      "interaction": 0.3130957782268524,
+      "formation_tracking": 0.36289387941360474
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.6588810030784571,
+      "formation_tracking": 0.8064823946336228
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.8760000467300415,
+    "t_index": 44,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.999943733215332,
+    "cause_probabilities": {
+      "wind": 0.0008976457756944001,
+      "gnss": 0.0007199635729193687,
+      "interaction": 0.0024114095140248537,
+      "formation_tracking": 0.9959709048271179
+    },
+    "raw_group_scores": {
+      "wind": 0.2584056390295083,
+      "gnss": 0.03783090570141234,
+      "interaction": 1.2465967583595974,
+      "formation_tracking": 7.270103509607027
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.8760000467300415,
+    "t_index": 44,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9987199306488037,
+    "cause_probabilities": {
+      "wind": 0.002870049560442567,
+      "gnss": 0.002919678809121251,
+      "interaction": 0.004513161722570658,
+      "formation_tracking": 0.9896970391273499
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0171442710713351,
+      "interaction": 0.4526686158179318,
+      "formation_tracking": 5.843069595103716
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.9179999828338623,
+    "t_index": 45,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.885383665561676,
+    "cause_probabilities": {
+      "wind": 0.16620047390460968,
+      "gnss": 0.16620047390460968,
+      "interaction": 0.29340094327926636,
+      "formation_tracking": 0.3741980791091919
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.5683454945549684,
+      "formation_tracking": 0.8115906299786917
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.9179999828338623,
+    "t_index": 45,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999070763587952,
+    "cause_probabilities": {
+      "wind": 0.0006133466376923025,
+      "gnss": 0.0006224375101737678,
+      "interaction": 0.0022971127182245255,
+      "formation_tracking": 0.996467113494873
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.01471297507113199,
+      "interaction": 1.320478088405391,
+      "formation_tracking": 7.393041185979493
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.9179999828338623,
+    "t_index": 45,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9991804361343384,
+    "cause_probabilities": {
+      "wind": 0.00162689748685807,
+      "gnss": 0.00162689748685807,
+      "interaction": 0.00277890358120203,
+      "formation_tracking": 0.9939672946929932
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.5353819480980677,
+      "formation_tracking": 6.41502952996038
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.9589999914169312,
+    "t_index": 46,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8029282689094543,
+    "cause_probabilities": {
+      "wind": 0.17862051725387573,
+      "gnss": 0.17862051725387573,
+      "interaction": 0.2550596296787262,
+      "formation_tracking": 0.3876993656158447
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.3562337493877004,
+      "formation_tracking": 0.7749666600025445
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.9589999914169312,
+    "t_index": 46,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999430179595947,
+    "cause_probabilities": {
+      "wind": 0.0005670466343872249,
+      "gnss": 0.0005670466343872249,
+      "interaction": 0.0023991998750716448,
+      "formation_tracking": 0.9964666366577148
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 1.442448852680641,
+      "formation_tracking": 7.4715297008361095
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 1.9589999914169312,
+    "t_index": 46,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9997496008872986,
+    "cause_probabilities": {
+      "wind": 0.001052917679771781,
+      "gnss": 0.0009314936469309032,
+      "interaction": 0.001744226086884737,
+      "formation_tracking": 0.9962713718414307
+    },
+    "raw_group_scores": {
+      "wind": 0.15896093694836597,
+      "gnss": 0.03642981942817999,
+      "interaction": 0.6637067997175446,
+      "formation_tracking": 7.011415497371916
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.000999927520752,
+    "t_index": 47,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8669441938400269,
+    "cause_probabilities": {
+      "wind": 0.19405768811702728,
+      "gnss": 0.1828451007604599,
+      "interaction": 0.23875044286251068,
+      "formation_tracking": 0.38434675335884094
+    },
+    "raw_group_scores": {
+      "wind": 0.059516148265132074,
+      "gnss": 0.0,
+      "interaction": 0.26677946701600386,
+      "formation_tracking": 0.7429058795230039
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.000999927520752,
+    "t_index": 47,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999127984046936,
+    "cause_probabilities": {
+      "wind": 0.0005272734561003745,
+      "gnss": 0.0005375197506509721,
+      "interaction": 0.002374245086684823,
+      "formation_tracking": 0.9965609908103943
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.019245899294192573,
+      "interaction": 1.5047155807461339,
+      "formation_tracking": 7.544346210124445
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.000999927520752,
+    "t_index": 47,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.999880313873291,
+    "cause_probabilities": {
+      "wind": 0.0005690303514711559,
+      "gnss": 0.0004950157599523664,
+      "interaction": 0.0010823274496942759,
+      "formation_tracking": 0.9978535771369934
+    },
+    "raw_group_scores": {
+      "wind": 0.15896093694836597,
+      "gnss": 0.019616775840454185,
+      "interaction": 0.8018962215416918,
+      "formation_tracking": 7.628388855648447
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.0429999828338623,
+    "t_index": 48,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.9325118660926819,
+    "cause_probabilities": {
+      "wind": 0.38878995180130005,
+      "gnss": 0.15310198068618774,
+      "interaction": 0.16198070347309113,
+      "formation_tracking": 0.2961273491382599
+    },
+    "raw_group_scores": {
+      "wind": 0.9545187667718839,
+      "gnss": 0.02258378464957386,
+      "interaction": 0.07895684365646352,
+      "formation_tracking": 0.6822692701483027
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.0429999828338623,
+    "t_index": 48,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999417066574097,
+    "cause_probabilities": {
+      "wind": 0.0005098198889754713,
+      "gnss": 0.0005138279520906508,
+      "interaction": 0.002257085172459483,
+      "formation_tracking": 0.9967193007469177
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.007831165263753832,
+      "interaction": 1.4877717467639422,
+      "formation_tracking": 7.578167109403486
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.0429999828338623,
+    "t_index": 48,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999490976333618,
+    "cause_probabilities": {
+      "wind": 0.0003347074380144477,
+      "gnss": 0.0002584884932730347,
+      "interaction": 0.000666867708787322,
+      "formation_tracking": 0.9987398982048035
+    },
+    "raw_group_scores": {
+      "wind": 0.2584056390295083,
+      "gnss": 0.0,
+      "interaction": 0.9477403229228267,
+      "formation_tracking": 8.259398926403525
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.0840001106262207,
+    "t_index": 49,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.7448355555534363,
+    "cause_probabilities": {
+      "wind": 0.20285704731941223,
+      "gnss": 0.20285704731941223,
+      "interaction": 0.21101415157318115,
+      "formation_tracking": 0.3832717537879944
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.039423740035110955,
+      "formation_tracking": 0.6362427516002183
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.0840001106262207,
+    "t_index": 49,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999765157699585,
+    "cause_probabilities": {
+      "wind": 0.000779542198870331,
+      "gnss": 0.0004934452590532601,
+      "interaction": 0.0024338657967746258,
+      "formation_tracking": 0.9962931275367737
+    },
+    "raw_group_scores": {
+      "wind": 0.4572951231321851,
+      "gnss": 0.0,
+      "interaction": 1.5958243560154122,
+      "formation_tracking": 7.610384827104024
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.0840001106262207,
+    "t_index": 49,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999725222587585,
+    "cause_probabilities": {
+      "wind": 0.0001621749106561765,
+      "gnss": 0.00013833996490575373,
+      "interaction": 0.00041335594141855836,
+      "formation_tracking": 0.9992861151695251
+    },
+    "raw_group_scores": {
+      "wind": 0.15896093694836597,
+      "gnss": 0.0,
+      "interaction": 1.0945946819379495,
+      "formation_tracking": 8.88508258694864
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.125999927520752,
+    "t_index": 50,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8801089525222778,
+    "cause_probabilities": {
+      "wind": 0.3089350759983063,
+      "gnss": 0.1881999522447586,
+      "interaction": 0.1858677864074707,
+      "formation_tracking": 0.31699714064598083
+    },
+    "raw_group_scores": {
+      "wind": 0.5567397985665301,
+      "gnss": 0.06111367378133872,
+      "interaction": 0.04864440819687922,
+      "formation_tracking": 0.582501556994098
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.125999927520752,
+    "t_index": 50,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999709129333496,
+    "cause_probabilities": {
+      "wind": 0.0006399659905582666,
+      "gnss": 0.0005113263032399118,
+      "interaction": 0.002280897693708539,
+      "formation_tracking": 0.9965678453445435
+    },
+    "raw_group_scores": {
+      "wind": 0.2584056390295083,
+      "gnss": 0.03399851986700367,
+      "interaction": 1.529314819623642,
+      "formation_tracking": 7.609062920785356
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.125999927520752,
+    "t_index": 50,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999944567680359,
+    "cause_probabilities": {
+      "wind": 0.00021419663971755654,
+      "gnss": 7.465897942893207e-05,
+      "interaction": 0.00025845252093859017,
+      "formation_tracking": 0.9994526505470276
+    },
+    "raw_group_scores": {
+      "wind": 1.0539634422062287,
+      "gnss": 0.0,
+      "interaction": 1.2417811608306002,
+      "formation_tracking": 9.502032535823465
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.1670000553131104,
+    "t_index": 51,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8091515302658081,
+    "cause_probabilities": {
+      "wind": 0.19756223261356354,
+      "gnss": 0.19996239244937897,
+      "interaction": 0.24432885646820068,
+      "formation_tracking": 0.3581465184688568
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.012075632852366885,
+      "interaction": 0.2124613857387036,
+      "formation_tracking": 0.5948885316857899
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.1670000553131104,
+    "t_index": 51,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999590516090393,
+    "cause_probabilities": {
+      "wind": 0.0004944002139382064,
+      "gnss": 0.0004944002139382064,
+      "interaction": 0.0025229407474398613,
+      "formation_tracking": 0.9964883327484131
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 1.6298348472963344,
+      "formation_tracking": 7.608647447146321
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.1670000553131104,
+    "t_index": 51,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999896883964539,
+    "cause_probabilities": {
+      "wind": 4.0981794882100075e-05,
+      "gnss": 4.1225772292818874e-05,
+      "interaction": 0.00016477701137773693,
+      "formation_tracking": 0.9997530579566956
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.005935576137511947,
+      "interaction": 1.3914656521548365,
+      "formation_tracking": 10.102135661657588
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.2049999237060547,
+    "t_index": 52,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8078444600105286,
+    "cause_probabilities": {
+      "wind": 0.3092938959598541,
+      "gnss": 0.17724841833114624,
+      "interaction": 0.18806801736354828,
+      "formation_tracking": 0.32538971304893494
+    },
+    "raw_group_scores": {
+      "wind": 0.5567397985665301,
+      "gnss": 0.0,
+      "interaction": 0.05925163154121421,
+      "formation_tracking": 0.6074714540392732
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.2049999237060547,
+    "t_index": 52,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999682307243347,
+    "cause_probabilities": {
+      "wind": 0.0007153191836550832,
+      "gnss": 0.0005377126508392394,
+      "interaction": 0.001862982870079577,
+      "formation_tracking": 0.9968839287757874
+    },
+    "raw_group_scores": {
+      "wind": 0.3578504210510428,
+      "gnss": 0.07244598671297231,
+      "interaction": 1.3150559455425839,
+      "formation_tracking": 7.597511248992295
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.2049999237060547,
+    "t_index": 52,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999977946281433,
+    "cause_probabilities": {
+      "wind": 3.173901131958701e-05,
+      "gnss": 2.2191212337929755e-05,
+      "interaction": 0.00010387515067122877,
+      "formation_tracking": 0.9998421669006348
+    },
+    "raw_group_scores": {
+      "wind": 0.3578504210510428,
+      "gnss": 0.0,
+      "interaction": 1.5434931357839754,
+      "formation_tracking": 10.715655871886218
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.246000051498413,
+    "t_index": 53,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.7390503883361816,
+    "cause_probabilities": {
+      "wind": 0.210844486951828,
+      "gnss": 0.2091635912656784,
+      "interaction": 0.2111341506242752,
+      "formation_tracking": 0.368857741355896
+    },
+    "raw_group_scores": {
+      "wind": 0.059516148265132074,
+      "gnss": 0.051512103030372444,
+      "interaction": 0.060889064888752904,
+      "formation_tracking": 0.618806425128985
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.246000051498413,
+    "t_index": 53,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999555349349976,
+    "cause_probabilities": {
+      "wind": 0.0006406126194633543,
+      "gnss": 0.00050923420349136,
+      "interaction": 0.001501695136539638,
+      "formation_tracking": 0.997348427772522
+    },
+    "raw_group_scores": {
+      "wind": 0.2584056390295083,
+      "gnss": 0.028888677627083754,
+      "interaction": 1.110330489958268,
+      "formation_tracking": 7.6088360655115395
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.246000051498413,
+    "t_index": 53,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999986886978149,
+    "cause_probabilities": {
+      "wind": 1.501484166510636e-05,
+      "gnss": 1.2818682989745867e-05,
+      "interaction": 6.881415902171284e-05,
+      "formation_tracking": 0.9999033212661743
+    },
+    "raw_group_scores": {
+      "wind": 0.15896093694836597,
+      "gnss": 0.0008257295947494092,
+      "interaction": 1.6813317486320636,
+      "formation_tracking": 11.265335658641307
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.2880001068115234,
+    "t_index": 54,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8200876712799072,
+    "cause_probabilities": {
+      "wind": 0.30793532729148865,
+      "gnss": 0.17969158291816711,
+      "interaction": 0.18758629262447357,
+      "formation_tracking": 0.32478681206703186
+    },
+    "raw_group_scores": {
+      "wind": 0.5567397985665301,
+      "gnss": 0.01809206207348284,
+      "interaction": 0.06108898556607426,
+      "formation_tracking": 0.6100190294489072
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.2880001068115234,
+    "t_index": 54,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999627470970154,
+    "cause_probabilities": {
+      "wind": 0.0008448709850199521,
+      "gnss": 0.0005347979022189975,
+      "interaction": 0.0018060216680169106,
+      "formation_tracking": 0.9968143105506897
+    },
+    "raw_group_scores": {
+      "wind": 0.4572951231321851,
+      "gnss": 0.0,
+      "interaction": 1.2169929865073612,
+      "formation_tracking": 7.530430785958907
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.2880001068115234,
+    "t_index": 54,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999995827674866,
+    "cause_probabilities": {
+      "wind": 1.3675406989932526e-05,
+      "gnss": 7.095174623827916e-06,
+      "interaction": 4.4431028072722256e-05,
+      "formation_tracking": 0.9999347925186157
+    },
+    "raw_group_scores": {
+      "wind": 0.6561845805880646,
+      "gnss": 0.0,
+      "interaction": 1.8345237349062662,
+      "formation_tracking": 11.8560300239392
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.3299999237060547,
+    "t_index": 55,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.7592767477035522,
+    "cause_probabilities": {
+      "wind": 0.23000448942184448,
+      "gnss": 0.1962006688117981,
+      "interaction": 0.20832523703575134,
+      "formation_tracking": 0.3654695451259613
+    },
+    "raw_group_scores": {
+      "wind": 0.15896093694836597,
+      "gnss": 0.0,
+      "interaction": 0.059962540617584034,
+      "formation_tracking": 0.622044997433415
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.3299999237060547,
+    "t_index": 55,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999426007270813,
+    "cause_probabilities": {
+      "wind": 0.0005227259243838489,
+      "gnss": 0.0005480045801959932,
+      "interaction": 0.0020962534472346306,
+      "formation_tracking": 0.9968330264091492
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.04722642904682556,
+      "interaction": 1.388849567106233,
+      "formation_tracking": 7.553281522876118
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.3299999237060547,
+    "t_index": 55,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999988079071045,
+    "cause_probabilities": {
+      "wind": 7.5193984230281785e-06,
+      "gnss": 7.5193984230281785e-06,
+      "interaction": 5.484183202497661e-05,
+      "formation_tracking": 0.9999301433563232
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 1.9869669560613332,
+      "formation_tracking": 11.7979549494478
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.371000051498413,
+    "t_index": 56,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8320093750953674,
+    "cause_probabilities": {
+      "wind": 0.30623292922973633,
+      "gnss": 0.17600873112678528,
+      "interaction": 0.18598176538944244,
+      "formation_tracking": 0.33177655935287476
+    },
+    "raw_group_scores": {
+      "wind": 0.5567397985665301,
+      "gnss": 0.0029273585594762988,
+      "interaction": 0.058042495523998296,
+      "formation_tracking": 0.6368555696598567
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.371000051498413,
+    "t_index": 56,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999485611915588,
+    "cause_probabilities": {
+      "wind": 0.0007493981393054128,
+      "gnss": 0.0005937979440204799,
+      "interaction": 0.0017821218352764845,
+      "formation_tracking": 0.9968746900558472
+    },
+    "raw_group_scores": {
+      "wind": 0.2584056390295083,
+      "gnss": 0.02567441501747718,
+      "interaction": 1.1246952912283013,
+      "formation_tracking": 7.451515471611201
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.371000051498413,
+    "t_index": 56,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999995231628418,
+    "cause_probabilities": {
+      "wind": 4.123277904000133e-06,
+      "gnss": 4.123277904000133e-06,
+      "interaction": 3.493803887977265e-05,
+      "formation_tracking": 0.9999568462371826
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 2.136927308004346,
+      "formation_tracking": 12.398819196195582
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.4130001068115234,
+    "t_index": 57,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8123650550842285,
+    "cause_probabilities": {
+      "wind": 0.2580532431602478,
+      "gnss": 0.18042506277561188,
+      "interaction": 0.19082599878311157,
+      "formation_tracking": 0.37069568037986755
+    },
+    "raw_group_scores": {
+      "wind": 0.3578504210510428,
+      "gnss": 0.0,
+      "interaction": 0.05604656193892178,
+      "formation_tracking": 0.7200658774261977
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.4130001068115234,
+    "t_index": 57,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999613165855408,
+    "cause_probabilities": {
+      "wind": 0.0009270776645280421,
+      "gnss": 0.0005868342705070972,
+      "interaction": 0.002086830325424671,
+      "formation_tracking": 0.9963992834091187
+    },
+    "raw_group_scores": {
+      "wind": 0.4572951231321851,
+      "gnss": 0.0,
+      "interaction": 1.268659051885784,
+      "formation_tracking": 7.437161039021243
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.4130001068115234,
+    "t_index": 57,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999995827674866,
+    "cause_probabilities": {
+      "wind": 2.261884219478816e-06,
+      "gnss": 2.261884219478816e-06,
+      "interaction": 2.220580972789321e-05,
+      "formation_tracking": 0.9999732971191406
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 2.2841555485322256,
+      "formation_tracking": 12.99928585035943
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.4539999961853027,
+    "t_index": 58,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.6813910007476807,
+    "cause_probabilities": {
+      "wind": 0.18830369412899017,
+      "gnss": 0.18830369412899017,
+      "interaction": 0.19885987043380737,
+      "formation_tracking": 0.4245326817035675
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.05454420392207554,
+      "formation_tracking": 0.8129328403697224
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.4539999961853027,
+    "t_index": 58,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999663829803467,
+    "cause_probabilities": {
+      "wind": 0.0009390717023052275,
+      "gnss": 0.0006032617529854178,
+      "interaction": 0.0023852288722991943,
+      "formation_tracking": 0.9960724115371704
+    },
+    "raw_group_scores": {
+      "wind": 0.4572951231321851,
+      "gnss": 0.014754183840047962,
+      "interaction": 1.38945342892056,
+      "formation_tracking": 7.423978353908595
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.4539999961853027,
+    "t_index": 58,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999999403953552,
+    "cause_probabilities": {
+      "wind": 1.772874384187162e-06,
+      "gnss": 1.2395546491461573e-06,
+      "interaction": 1.4065357390791178e-05,
+      "formation_tracking": 0.9999829530715942
+    },
+    "raw_group_scores": {
+      "wind": 0.3578504210510428,
+      "gnss": 0.0,
+      "interaction": 2.428962874030303,
+      "formation_tracking": 13.600741577432698
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.496000051498413,
+    "t_index": 59,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.9251771569252014,
+    "cause_probabilities": {
+      "wind": 0.3619011342525482,
+      "gnss": 0.1448163241147995,
+      "interaction": 0.14706814289093018,
+      "formation_tracking": 0.3462143540382385
+    },
+    "raw_group_scores": {
+      "wind": 0.9545187667718839,
+      "gnss": 0.038613866375860464,
+      "interaction": 0.05404375510048324,
+      "formation_tracking": 0.910205764399824
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.496000051498413,
+    "t_index": 59,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999387860298157,
+    "cause_probabilities": {
+      "wind": 0.0007081820513121784,
+      "gnss": 0.0006041003507561982,
+      "interaction": 0.0018762792460620403,
+      "formation_tracking": 0.9968114495277405
+    },
+    "raw_group_scores": {
+      "wind": 0.15896093694836597,
+      "gnss": 0.0,
+      "interaction": 1.133305683952229,
+      "formation_tracking": 7.408576624203606
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.496000051498413,
+    "t_index": 59,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9999999403953552,
+    "cause_probabilities": {
+      "wind": 6.78307230828068e-07,
+      "gnss": 7.083606305968715e-07,
+      "interaction": 8.879035704012495e-06,
+      "formation_tracking": 0.9999897480010986
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.04335283563049198,
+      "interaction": 2.5718484413445903,
+      "formation_tracking": 14.203655143980397
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.5380001068115234,
+    "t_index": 60,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.9047708511352539,
+    "cause_probabilities": {
+      "wind": 0.26652926206588745,
+      "gnss": 0.15332777798175812,
+      "interaction": 0.1613219529390335,
+      "formation_tracking": 0.4188210070133209
+    },
+    "raw_group_scores": {
+      "wind": 0.5567397985665301,
+      "gnss": 0.0038339473211589405,
+      "interaction": 0.054657996903990196,
+      "formation_tracking": 1.0086994862062268
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.5380001068115234,
+    "t_index": 60,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999349117279053,
+    "cause_probabilities": {
+      "wind": 0.0006465886835940182,
+      "gnss": 0.0006092290859669447,
+      "interaction": 0.002057179808616638,
+      "formation_tracking": 0.9966869950294495
+    },
+    "raw_group_scores": {
+      "wind": 0.059516148265132074,
+      "gnss": 0.0,
+      "interaction": 1.2168972876958197,
+      "formation_tracking": 7.399997909746121
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.5380001068115234,
+    "t_index": 60,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 1.0,
+    "cause_probabilities": {
+      "wind": 8.737937946534657e-07,
+      "gnss": 3.7158230270506465e-07,
+      "interaction": 5.59569662073045e-06,
+      "formation_tracking": 0.9999932050704956
+    },
+    "raw_group_scores": {
+      "wind": 0.8550740380439441,
+      "gnss": 0.0,
+      "interaction": 2.7119823428044247,
+      "formation_tracking": 14.805488829435923
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.5789999961853027,
+    "t_index": 61,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8885218501091003,
+    "cause_probabilities": {
+      "wind": 0.25837889313697815,
+      "gnss": 0.1480703353881836,
+      "interaction": 0.15659549832344055,
+      "formation_tracking": 0.43695518374443054
+    },
+    "raw_group_scores": {
+      "wind": 0.5567397985665301,
+      "gnss": 0.0,
+      "interaction": 0.055978774698501675,
+      "formation_tracking": 1.082143332237696
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.5789999961853027,
+    "t_index": 61,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999218583106995,
+    "cause_probabilities": {
+      "wind": 0.0006225229008123279,
+      "gnss": 0.0006225229008123279,
+      "interaction": 0.002358559751883149,
+      "formation_tracking": 0.9963963627815247
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 1.3320259207177938,
+      "formation_tracking": 7.378120084220551
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.5789999961853027,
+    "t_index": 61,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 1.0,
+    "cause_probabilities": {
+      "wind": 2.0383161825066054e-07,
+      "gnss": 2.0931368283072516e-07,
+      "interaction": 3.5211771773902e-06,
+      "formation_tracking": 0.9999960660934448
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.026539793229757247,
+      "interaction": 2.8492568584219073,
+      "formation_tracking": 15.40596775497582
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.621000051498413,
+    "t_index": 62,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.9058265089988708,
+    "cause_probabilities": {
+      "wind": 0.2686007022857666,
+      "gnss": 0.14247576892375946,
+      "interaction": 0.14762671291828156,
+      "formation_tracking": 0.44129684567451477
+    },
+    "raw_group_scores": {
+      "wind": 0.6561845805880646,
+      "gnss": 0.022130489378489236,
+      "interaction": 0.057645441459118714,
+      "formation_tracking": 1.1526763068662929
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.621000051498413,
+    "t_index": 62,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999242424964905,
+    "cause_probabilities": {
+      "wind": 0.0007412139093503356,
+      "gnss": 0.0006322774570435286,
+      "interaction": 0.0017542749410495162,
+      "formation_tracking": 0.9968722462654114
+    },
+    "raw_group_scores": {
+      "wind": 0.15896093694836597,
+      "gnss": 0.0,
+      "interaction": 1.02048246435777,
+      "formation_tracking": 7.363049563642088
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.621000051498413,
+    "t_index": 62,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 1.0,
+    "cause_probabilities": {
+      "wind": 1.1251535170231364e-07,
+      "gnss": 1.1251535170231364e-07,
+      "interaction": 2.2212311705516186e-06,
+      "formation_tracking": 0.9999974966049194
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 2.98272725358176,
+      "formation_tracking": 16.000173553080288
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.6619999408721924,
+    "t_index": 63,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8847824931144714,
+    "cause_probabilities": {
+      "wind": 0.20543982088565826,
+      "gnss": 0.14363893866539001,
+      "interaction": 0.1523423045873642,
+      "formation_tracking": 0.49857890605926514
+    },
+    "raw_group_scores": {
+      "wind": 0.3578504210510428,
+      "gnss": 0.0,
+      "interaction": 0.05882727882223609,
+      "formation_tracking": 1.244459126145504
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.6619999408721924,
+    "t_index": 63,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9998859167098999,
+    "cause_probabilities": {
+      "wind": 0.0006179689662531018,
+      "gnss": 0.0006179689662531018,
+      "interaction": 0.0019028912065550685,
+      "formation_tracking": 0.9968612194061279
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 1.1246917559183618,
+      "formation_tracking": 7.385928449596228
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.6619999408721924,
+    "t_index": 63,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 1.0,
+    "cause_probabilities": {
+      "wind": 1.8034408810763125e-07,
+      "gnss": 6.2859548677352e-08,
+      "interaction": 1.4123349956207676e-06,
+      "formation_tracking": 0.9999983310699463
+    },
+    "raw_group_scores": {
+      "wind": 1.0539634422062287,
+      "gnss": 0.0,
+      "interaction": 3.112096770060528,
+      "formation_tracking": 16.582361992621543
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.7039999961853027,
+    "t_index": 64,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8501322269439697,
+    "cause_probabilities": {
+      "wind": 0.14626716077327728,
+      "gnss": 0.14626716077327728,
+      "interaction": 0.1551639288663864,
+      "formation_tracking": 0.5523017644882202
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.059047267102400436,
+      "formation_tracking": 1.3286597334388555
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.7039999961853027,
+    "t_index": 64,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999722838401794,
+    "cause_probabilities": {
+      "wind": 0.0014535567024722695,
+      "gnss": 0.0006181275239214301,
+      "interaction": 0.00213735643774271,
+      "formation_tracking": 0.995790958404541
+    },
+    "raw_group_scores": {
+      "wind": 0.8550740380439441,
+      "gnss": 0.0,
+      "interaction": 1.2406304265760766,
+      "formation_tracking": 7.384597738608533
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.7039999961853027,
+    "t_index": 64,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 1.0,
+    "cause_probabilities": {
+      "wind": 6.250464679169454e-08,
+      "gnss": 3.585234154002137e-08,
+      "interaction": 9.115737498177623e-07,
+      "formation_tracking": 0.9999990463256836
+    },
+    "raw_group_scores": {
+      "wind": 0.5567397985665301,
+      "gnss": 0.0009081478744507705,
+      "interaction": 3.2366717352367838,
+      "formation_tracking": 17.14476406542398
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.746000051498413,
+    "t_index": 65,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8946884274482727,
+    "cause_probabilities": {
+      "wind": 0.19157902896404266,
+      "gnss": 0.13394777476787567,
+      "interaction": 0.14193634688854218,
+      "formation_tracking": 0.5325368046760559
+    },
+    "raw_group_scores": {
+      "wind": 0.3578504210510428,
+      "gnss": 0.0,
+      "interaction": 0.05792863186595652,
+      "formation_tracking": 1.3802020594007458
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.746000051498413,
+    "t_index": 65,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999467730522156,
+    "cause_probabilities": {
+      "wind": 0.0009559672907926142,
+      "gnss": 0.0006051211967132986,
+      "interaction": 0.0016205130377784371,
+      "formation_tracking": 0.9968184232711792
+    },
+    "raw_group_scores": {
+      "wind": 0.4572951231321851,
+      "gnss": 0.0,
+      "interaction": 0.9850691305173344,
+      "formation_tracking": 7.406895098967455
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.746000051498413,
+    "t_index": 65,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 1.0,
+    "cause_probabilities": {
+      "wind": 2.100563634144237e-08,
+      "gnss": 2.100563634144237e-08,
+      "interaction": 6.020196678946377e-07,
+      "formation_tracking": 0.9999994039535522
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 3.355499303061384,
+      "formation_tracking": 17.678474433890013
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.7869999408721924,
+    "t_index": 66,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.7982479929924011,
+    "cause_probabilities": {
+      "wind": 0.13702966272830963,
+      "gnss": 0.13702966272830963,
+      "interaction": 0.14478343725204468,
+      "formation_tracking": 0.5811572670936584
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.055041644591007466,
+      "formation_tracking": 1.4448239769374676
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.7869999408721924,
+    "t_index": 66,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.9999164938926697,
+    "cause_probabilities": {
+      "wind": 0.0005955588421784341,
+      "gnss": 0.0005955588421784341,
+      "interaction": 0.0016945002134889364,
+      "formation_tracking": 0.9971144199371338
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 1.0456429942982457,
+      "formation_tracking": 7.423120382680883
+    }
+  },
+  {
+    "event": "formation_loss",
+    "time": 2.7869999408721924,
+    "t_index": 66,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 1.0,
+    "cause_probabilities": {
+      "wind": 2.708870283640863e-08,
+      "gnss": 1.3642271312619414e-08,
+      "interaction": 4.0840572523848095e-07,
+      "formation_tracking": 0.9999995231628418
+    },
+    "raw_group_scores": {
+      "wind": 0.7556292560224095,
+      "gnss": 0.06968502649639677,
+      "interaction": 3.4687722970023684,
+      "formation_tracking": 18.179777325352482
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 0.1289999932050705,
+    "t_index": 2,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.8238928914070129,
+    "cause_probabilities": {
+      "wind": 0.04305236041545868,
+      "gnss": 0.8707482814788818,
+      "interaction": 0.04719291627407074,
+      "formation_tracking": 0.03900647163391113
+    },
+    "raw_group_scores": {
+      "wind": 0.0986895890264348,
+      "gnss": 3.1056255093589376,
+      "interaction": 0.19051631652364828,
+      "formation_tracking": 0.0
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 0.17100000381469727,
+    "t_index": 3,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.8981401324272156,
+    "cause_probabilities": {
+      "wind": 0.020139511674642563,
+      "gnss": 0.9353697299957275,
+      "interaction": 0.024351155385375023,
+      "formation_tracking": 0.020139511674642563
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 3.8382582394229816,
+      "interaction": 0.18989553826194705,
+      "formation_tracking": 0.0
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 0.21199999749660492,
+    "t_index": 4,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.9321244359016418,
+    "cause_probabilities": {
+      "wind": 0.018359418958425522,
+      "gnss": 0.9474048018455505,
+      "interaction": 0.01873418129980564,
+      "formation_tracking": 0.015501574613153934
+    },
+    "raw_group_scores": {
+      "wind": 0.1692012409626211,
+      "gnss": 4.112784942386841,
+      "interaction": 0.18940799770447586,
+      "formation_tracking": 0.0
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 0.7900000214576721,
+    "t_index": 18,
+    "drone": 0,
+    "drone_name": "drone_0",
+    "predicted_event_probability": 0.11960414052009583,
+    "cause_probabilities": {
+      "wind": 0.17305652797222137,
+      "gnss": 0.17305652797222137,
+      "interaction": 0.309296578168869,
+      "formation_tracking": 0.3445903956890106
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 0.0,
+      "interaction": 0.5806823869074342,
+      "formation_tracking": 0.6887382508175617
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 0.8320000171661377,
+    "t_index": 19,
+    "drone": 0,
+    "drone_name": "drone_0",
+    "predicted_event_probability": 0.9628778100013733,
+    "cause_probabilities": {
+      "wind": 0.026630353182554245,
+      "gnss": 0.8713065981864929,
+      "interaction": 0.04902936890721321,
+      "formation_tracking": 0.05303366482257843
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 3.487942151128904,
+      "interaction": 0.6103678990567651,
+      "formation_tracking": 0.6888752908378829
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 0.8740000128746033,
+    "t_index": 20,
+    "drone": 0,
+    "drone_name": "drone_0",
+    "predicted_event_probability": 0.9622586369514465,
+    "cause_probabilities": {
+      "wind": 0.029201192781329155,
+      "gnss": 0.8577919006347656,
+      "interaction": 0.05486052483320236,
+      "formation_tracking": 0.05814632773399353
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 3.380152018270674,
+      "interaction": 0.6305844440354855,
+      "formation_tracking": 0.6887530845731125
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 1.1649999618530273,
+    "t_index": 27,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.5109537243843079,
+    "cause_probabilities": {
+      "wind": 0.17859435081481934,
+      "gnss": 0.4389689862728119,
+      "interaction": 0.2270190417766571,
+      "formation_tracking": 0.1554175466299057
+    },
+    "raw_group_scores": {
+      "wind": 0.15157333034032547,
+      "gnss": 1.0508851009161397,
+      "interaction": 0.39149009143413305,
+      "formation_tracking": 0.012571731323282952
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 1.8350000381469727,
+    "t_index": 43,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.6196319460868835,
+    "cause_probabilities": {
+      "wind": 0.10904806852340698,
+      "gnss": 0.6533046364784241,
+      "interaction": 0.12683868408203125,
+      "formation_tracking": 0.1108086109161377
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 1.7902548355664,
+      "interaction": 0.15112731526393702,
+      "formation_tracking": 0.016015793203041494
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 1.8760000467300415,
+    "t_index": 44,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.8304901719093323,
+    "cause_probabilities": {
+      "wind": 0.04654973745346069,
+      "gnss": 0.8532852530479431,
+      "interaction": 0.05278388783335686,
+      "formation_tracking": 0.04738117381930351
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 2.9085723701023034,
+      "interaction": 0.12568438058195192,
+      "formation_tracking": 0.017703639665559434
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 1.9589999914169312,
+    "t_index": 46,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.5655125975608826,
+    "cause_probabilities": {
+      "wind": 0.12236900627613068,
+      "gnss": 0.6205206513404846,
+      "interaction": 0.13278859853744507,
+      "formation_tracking": 0.12432173639535904
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 1.6235177803304626,
+      "interaction": 0.08171717635455722,
+      "formation_tracking": 0.015831665378563002
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 2.0840001106262207,
+    "t_index": 49,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.7800377011299133,
+    "cause_probabilities": {
+      "wind": 0.06885620951652527,
+      "gnss": 0.7280057668685913,
+      "interaction": 0.07205403596162796,
+      "formation_tracking": 0.13108395040035248
+    },
+    "raw_group_scores": {
+      "wind": 0.02817795598425603,
+      "gnss": 2.38646640036308,
+      "interaction": 0.07357374327400062,
+      "formation_tracking": 0.6719956002325724
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 2.2880001068115234,
+    "t_index": 54,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.707721471786499,
+    "cause_probabilities": {
+      "wind": 0.08915795385837555,
+      "gnss": 0.6278128027915955,
+      "interaction": 0.08542729914188385,
+      "formation_tracking": 0.19760195910930634
+    },
+    "raw_group_scores": {
+      "wind": 0.1163175090957342,
+      "gnss": 2.068150089336399,
+      "interaction": 0.07357374327400062,
+      "formation_tracking": 0.9121626592753415
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 2.4130001068115234,
+    "t_index": 57,
+    "drone": 3,
+    "drone_name": "drone_3",
+    "predicted_event_probability": 0.7995014786720276,
+    "cause_probabilities": {
+      "wind": 0.05593482032418251,
+      "gnss": 0.7030978202819824,
+      "interaction": 0.060205332934856415,
+      "formation_tracking": 0.18076208233833313
+    },
+    "raw_group_scores": {
+      "wind": 0.0,
+      "gnss": 2.53130884561973,
+      "interaction": 0.07357374327400062,
+      "formation_tracking": 1.1729945815661387
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 2.621000051498413,
+    "t_index": 62,
+    "drone": 2,
+    "drone_name": "drone_2",
+    "predicted_event_probability": 0.8510454297065735,
+    "cause_probabilities": {
+      "wind": 0.0493987612426281,
+      "gnss": 0.8188481330871582,
+      "interaction": 0.048026226460933685,
+      "formation_tracking": 0.08372686803340912
+    },
+    "raw_group_scores": {
+      "wind": 0.02817795598425603,
+      "gnss": 2.8361513415261013,
+      "interaction": 0.0,
+      "formation_tracking": 0.5558127442252158
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 2.6619999408721924,
+    "t_index": 63,
+    "drone": 0,
+    "drone_name": "drone_0",
+    "predicted_event_probability": 0.5115346908569336,
+    "cause_probabilities": {
+      "wind": 0.14217370748519897,
+      "gnss": 0.4686528742313385,
+      "interaction": 0.14877653121948242,
+      "formation_tracking": 0.2403969168663025
+    },
+    "raw_group_scores": {
+      "wind": 0.02817795598425603,
+      "gnss": 1.2209907069582164,
+      "interaction": 0.07357374327400062,
+      "formation_tracking": 0.5534196350142446
+    }
+  },
+  {
+    "event": "gnss_degradation",
+    "time": 2.746000051498413,
+    "t_index": 65,
+    "drone": 1,
+    "drone_name": "drone_1",
+    "predicted_event_probability": 0.6764829158782959,
+    "cause_probabilities": {
+      "wind": 0.10888779908418655,
+      "gnss": 0.6705422401428223,
+      "interaction": 0.11176697164773941,
+      "formation_tracking": 0.1088028997182846
+    },
+    "raw_group_scores": {
+      "wind": 0.06343378195234918,
+      "gnss": 1.8812024084460586,
+      "interaction": 0.08953191619275178,
+      "formation_tracking": 0.06265380126951463
+    }
+  }
+]

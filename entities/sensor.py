@@ -25,6 +25,15 @@ class GNSSensor(Sensor):
         self.pos_noise_std = float(config.get("position_noise_std", 0.0))
         self.vel_noise_std = float(config.get("velocity_noise_std", 0.0))
 
+        # Optional GNSS degradation / jamming schedule (for causal case studies)
+        self.pos_noise_std_base = self.pos_noise_std
+        self.vel_noise_std_base = self.vel_noise_std
+        self.jam_start = config.get("jam_start", None)
+        self.jam_end = config.get("jam_end", None)
+        self.jam_pos_noise_std = config.get("jam_position_noise_std", config.get("jam_pos_noise_std", None))
+        self.jam_vel_noise_std = config.get("jam_velocity_noise_std", config.get("jam_vel_noise_std", None))
+        self.jam_multiplier = float(config.get("jam_multiplier", 1.0))
+
         if self.pos_noise_std < 0.0:
             self.pos_noise_std = 0.0
         if self.vel_noise_std < 0.0:
@@ -34,12 +43,29 @@ class GNSSensor(Sensor):
         self,
         ground_truth_position: np.ndarray,
         ground_truth_velocity: np.ndarray,
+        t: float | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Renvoie (position_mesurée, vitesse_mesurée) avec bruit gaussien.
+        Optionnel: t (temps sim) pour appliquer une fenêtre de brouillage (jam).
         """
-        pos_noise = np.random.normal(0.0, self.pos_noise_std, 3)
-        vel_noise = np.random.normal(0.0, self.vel_noise_std, 3)
+        pos_std = self.pos_noise_std
+        vel_std = self.vel_noise_std
+
+        # Apply jamming window if configured
+        if (t is not None) and (self.jam_start is not None) and (self.jam_end is not None):
+            if float(self.jam_start) <= float(t) <= float(self.jam_end):
+                if self.jam_pos_noise_std is not None:
+                    pos_std = float(self.jam_pos_noise_std)
+                else:
+                    pos_std = float(self.pos_noise_std_base) * float(self.jam_multiplier)
+                if self.jam_vel_noise_std is not None:
+                    vel_std = float(self.jam_vel_noise_std)
+                else:
+                    vel_std = float(self.vel_noise_std_base) * float(self.jam_multiplier)
+
+        pos_noise = np.random.normal(0.0, pos_std, 3)
+        vel_noise = np.random.normal(0.0, vel_std, 3)
 
         meas_pos = ground_truth_position + pos_noise
         meas_vel = ground_truth_velocity + vel_noise

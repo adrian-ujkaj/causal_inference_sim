@@ -1,5 +1,6 @@
 # simulator/simulator_manager.py
 import time
+import random
 import numpy as np
 import pybullet as p
 import pybullet_data
@@ -45,8 +46,20 @@ class SimulationManager:
     def __init__(self, config: dict):
         self.config = config
         self.dt = float(self.config["simulation"]["dt"])
+
+        # Reproducibility (set simulation.seed in config.yaml)
+        sim_cfg = self.config.get("simulation", {})
+        simulation_seed = sim_cfg.get("seed", None)
+        if simulation_seed is not None:
+            try:
+                simulation_seed = int(simulation_seed)
+                random.seed(simulation_seed)
+                np.random.seed(simulation_seed)
+            except Exception:
+                pass
         # 1. Connexion PyBullet
         mode_str = str(self.config["simulation"]["connect_mode"]).strip().lower()
+        self.realtime = bool(self.config.get("simulation", {}).get("realtime", mode_str == "gui"))
         mode = p.GUI if mode_str == "gui" else p.DIRECT
         self.physics_client_id = p.connect(mode)
         if self.physics_client_id < 0:
@@ -308,7 +321,8 @@ class SimulationManager:
             p.stepSimulation(physicsClientId=self.physics_client_id)
 
             # 4. Real time
-            time.sleep(self.dt)
+            if self.realtime:
+                time.sleep(self.dt)
             sim_time += self.dt
 
     # ------------------------------------------------------------------
