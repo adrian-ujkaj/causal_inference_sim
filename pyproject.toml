@@ -1,0 +1,25 @@
+[project]
+name = "causal-inference-sim"
+version = "1.0.0"
+description = "Quadrotor swarm simulation (PyBullet) with GNSS/INS navigation filters and causal analysis of failures"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = ["runs", "logs", "results", "causal_out", ".conda"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+ignore = [
+    "E501",   # lignes longues : laissees au formateur (chaines et commentaires)
+    "E741",   # noms courts (l, I) issus des equations
+    "B905",   # zip(strict=...) : Python 3.10+, inutile ici
+]
+
+[tool.ruff.format]
+quote-style = "preserve"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

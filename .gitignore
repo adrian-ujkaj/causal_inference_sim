@@ -207,3 +207,18 @@ marimo/_lsp/
 __marimo__/
 
 .conda/
+
+# ------------------------------------------------------------------
+# Projet : sorties generees et environnement local
+# ------------------------------------------------------------------
+runs/
+logs/
+results/
+causal_out/
+.conda/
+.vscode/
+.ruff_cache/
+_mc_runner.py
+_a_supprimer/
+*.csv
+!assets/**/*.csv

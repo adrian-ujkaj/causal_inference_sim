@@ -1,0 +1,5 @@
+# Normalise les fins de ligne ; les scripts Windows gardent CRLF.
+* text=auto
+*.bat text eol=crlf
+*.png binary
+*.urdf text

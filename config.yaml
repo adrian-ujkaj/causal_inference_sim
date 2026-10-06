@@ -42,7 +42,6 @@ agents:
     sensors:
       gnss: {enabled: true, position_noise_std: 0.1, velocity_noise_std: 0.05,frequency: 10, delay_mean: 0.1,delay_std: 0.01}
       imu: {enabled: true, accel_noise_std: 0.3, gyro_noise_std: 0.03, gravity: 9.81}
-      lidar: {enabled: true, max_distance: 20.0, angle_resolution: 4.0, fov_horizontal: 90.0, fov_vertical: 30.0, frequency: 10.0}
     wind: {wind_mean: [0,0,0], turbulence: 10}
     radar : 
       - name: "Radar_Alpha"
@@ -66,7 +65,6 @@ agents:
     sensors:
       gnss: {enabled: true, position_noise_std: 0.1, velocity_noise_std: 0.05,frequency: 10, delay_mean: 0.1,delay_std: 0.01}
       imu: {enabled: true, accel_noise_std: 0.3, gyro_noise_std: 0.03, gravity: 9.81}
-      lidar: {enabled: true, max_distance: 20.0, angle_resolution: 4.0, fov_horizontal: 90.0, fov_vertical: 30.0, frequency: 10.0}
     wind: {wind_mean: [0,0,0], turbulence: 10}
     radar : 
       - name: "Radar_Alpha"
@@ -89,7 +87,6 @@ agents:
     sensors:
       gnss: {enabled: true, position_noise_std: 0.1, velocity_noise_std: 0.05,frequency: 10, delay_mean: 0.1,delay_std: 0.01}
       imu: {enabled: true,accel_noise_mean: 0.5, accel_noise_std: 0.3, gyro_noise_std: 0.03, gravity: 9.81}
-      lidar: {enabled: true, max_distance: 20.0, angle_resolution: 4.0, fov_horizontal: 90.0, fov_vertical: 30.0, frequency: 10.0}
     wind: {wind_mean: [0,0,0], turbulence: 10}
     radar : 
       - name: "Radar_Alpha"
@@ -114,7 +111,6 @@ agents:
     sensors:
       gnss: {enabled: true, position_noise_std: 0.1, velocity_noise_std: 0.05,frequency: 10, delay_mean: 0.1,delay_std: 0.01}
       imu: {enabled: true, accel_noise_std: 0.3, gyro_noise_std: 0.03, gravity: 9.81}
-      lidar: {enabled: true, max_distance: 20.0, angle_resolution: 4.0, fov_horizontal: 90.0, fov_vertical: 30.0, frequency: 10.0}
     wind: {wind_mean: [0,0,0], turbulence: 10}
     radar : 
       - name: "Radar_Alpha"

@@ -1,39 +1,58 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-causal_analysis.py
+causal_analysis.py : analyse causale des defaillances d'un essaim de drones simule.
 
-Analyse causale poussée pour réseaux UxS (essaim de drones) :
-- Détection d'échecs (collisions, perte de formation, trajectoires sous-optimales,
-  dégradation GNSS, pertes dues au vent).
-- Inférence d'un graphe d'interactions inter-drones via Neural Relational Inference (NRI).
-- Scores de causalité complémentaires (Granger) pour facteurs exogènes (vent, GNSS).
-- Attribution probabiliste de causes potentielles par événement.
+Outils : Neural Relational Inference (NRI), regression logistique, tests de
+Granger, matrice de propagation des defaillances.
 
-Ce script est conçu pour fonctionner directement avec les logs CSV générés par le projet
-(entities/uav.py : logs/drone_*.csv), mais reste générique.
+Principes
+---------
+1. Plusieurs vols. Un vol de 30 s ne permet aucune conclusion causale : on
+   charge un repertoire de vols (runs/.../s1, s2, ...), ou plusieurs campagnes.
+   Les fenetres d'apprentissage ne traversent jamais deux vols.
 
-Références (implémentation inspirée des architectures NRI classiques) :
-- Kipf et al., "Neural Relational Inference for Interacting Systems", ICML 2018.
-- Dépôt PyTorch NRI (Fetaya et al.) : https://github.com/ethanfetaya/NRI
-- Granger causality (statsmodels) : https://www.statsmodels.org/
+2. Separation stricte entre DEFAILLANCES (a expliquer) et CAUSES CANDIDATES
+   (facteurs exogenes). Une defaillance n'est jamais expliquee par la variable
+   qui la definit, et les mediateurs (erreurs de suivi, de formation, de
+   navigation) ne sont pas des causes candidates.
+     Defaillances : perte de formation (suiveurs), degradation de navigation,
+                    quasi-collision.
+     Causes       : vent, erreur GNSS (a l'instant de mesure), manoeuvre du
+                    leader (pour ses suiveurs), voisins proches (graphe NRI).
 
-Sorties :
-- Matrices (CSV/NPY) : influence drones→drones, influences signées, impacts systémiques.
-- Figures (PNG) : heatmaps, graphes orientés, séries temporelles de proba d'événements,
-  attribution de causes.
+3. Seuils PHYSIQUES (metres, secondes), identiques pour tous les drones.
 
-Usage rapide (depuis la racine du projet) :
-    python analysis/causal_analysis.py --log_dir logs --output_dir causal_out
+4. Erreur de formation mesuree dans le repere du LEADER (la formation tourne
+   avec lui).
 
-Ajuster la vitesse/qualité :
-    python analysis/causal_analysis.py --downsample 4 --nri_steps 1500 --seq_len 30
+5. NRI (Kipf et al., 2018) : le type d'arete 0 ne transmet aucun message, un
+   terme KL tire les aretes vers un a priori parcimonieux, les messages ne
+   voient que des grandeurs relatives, et le decodeur connait le passe propre
+   de chaque drone (sinon les suiveurs "predisent" le leader). L'importance
+   d'une arete est mesuree par permutation sur des vols NON vus.
 
-Notes :
-- NRI ici est "unsupervised" au sens où il apprend le graphe latent en minimisant l'erreur
-  de prédiction dynamique (next-step prediction) sur les états observés.
-- Les "probabilités de causes" sont des probabilités *potentielles* (root-cause hypothesis),
-  obtenues par un modèle explicatif (logistic regression) + agrégation par groupe de facteurs.
+6. Tout est verifie quand c'est possible :
+   - graphe NRI compare a la structure connue de l'essaim (config.yaml) ;
+   - le graphe doit mieux predire que le meme modele sans aucune arete ;
+   - modeles d'evenements evalues par validation croisee PAR VOL, coefficients
+     avec intervalles de confiance (bootstrap par vol) ;
+   - propagation comparee a une hypothese nulle (decalage temporel).
+   La validation par INTERVENTION (provoquer une cause, mesurer son effet) est
+   dans analysis/causal_validation.py.
+
+Usage
+-----
+    python analysis/causal_analysis.py --log_dir runs/mc --output_dir causal_out
+    python analysis/causal_analysis.py --log_dir runs/base runs/gnss --output_dir out
+    python analysis/causal_analysis.py --log_dir logs --all_figures   # un seul vol
+
+Sorties : graphe_interactions.png, causes_defaillances.png, donnees/ (csv, json)
+et, avec --all_figures, details/ (cartes NRI, rapports de cotes, Granger,
+propagation).
+
+Reference : Kipf, Fetaya, Wang, Welling, Zemel, "Neural Relational Inference for
+Interacting Systems", ICML 2018.
 """
 
 from __future__ import annotations
@@ -43,15 +62,17 @@ import json
 import math
 import os
 import random
+import re
 import warnings
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
 import matplotlib
-matplotlib.use("Agg")  # safe for headless
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import networkx as nx
@@ -61,1384 +82,1645 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score, brier_score_loss
 from sklearn.preprocessing import StandardScaler
 
 from statsmodels.tsa.stattools import grangercausalitytests
 
+try:
+    import yaml
+except Exception:  # pragma: no cover
+    yaml = None
 
-# ---------------------------
-# Utils
-# ---------------------------
+
+OUTCOMES = ("formation_loss", "nav_degradation", "near_miss")
+FACTORS = ("wind", "gnss", "leader_maneuver", "interaction")
+# Cause candidate exclue pour une defaillance donnee, parce qu'elle est calculee a
+# partir des MEMES grandeurs que la defaillance : la pression des voisins est une
+# fonction des distances entre drones, qui definissent la quasi-collision et
+# l'ecart en formation. L'inclure revient a expliquer la defaillance par sa propre
+# definition (un premier essai donnait un rapport de cotes de 0.11 : un suiveur
+# hors de sa place est loin de ses voisins, ce n'est pas une cause). Elle reste
+# candidate pour la navigation, ou elle joue le role de CONTROLE NEGATIF.
+EXCLUDED_FACTORS = {"near_miss": {"interaction"}, "formation_loss": {"interaction"}}
+
+
+# ======================================================================
+# Utilitaires
+# ======================================================================
+
 
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+
 
 def set_torch_threads(n: int) -> None:
-    """
-    PyTorch peut être TRÈS lent sur des tenseurs minuscules si beaucoup de threads CPU sont activés.
-    Mettre n=1 (ou 2) est souvent 10x-1000x plus rapide dans ce type de pipeline NRI.
-    """
+    """Sur de petits tenseurs, beaucoup de threads PyTorch ralentit enormement."""
     n = int(max(1, n))
     try:
         torch.set_num_threads(n)
     except Exception:
         pass
-    try:
-        torch.set_num_interop_threads(n)
-    except Exception:
-        pass
-
 
 
 def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def to_numpy(x):
-    if isinstance(x, torch.Tensor):
-        return x.detach().cpu().numpy()
-    return np.asarray(x)
+def persist(mask: np.ndarray, n_steps: int) -> np.ndarray:
+    """Garde un 1 seulement apres n_steps valeurs vraies consecutives (par colonne)."""
+    if n_steps <= 1:
+        return mask.astype(np.int8)
+    out = np.zeros_like(mask, dtype=np.int8)
+    run = np.zeros(mask.shape[1:], dtype=np.int32)
+    for t in range(mask.shape[0]):
+        run = np.where(mask[t], run + 1, 0)
+        out[t] = run >= n_steps
+    return out
 
 
-def softmax_np(x: np.ndarray, axis: int = -1, eps: float = 1e-12) -> np.ndarray:
-    x = x - np.max(x, axis=axis, keepdims=True)
-    ex = np.exp(x)
-    return ex / (np.sum(ex, axis=axis, keepdims=True) + eps)
+def onsets(active: np.ndarray) -> np.ndarray:
+    """Fronts montants d'un signal binaire [T, N]."""
+    a = active.astype(np.int8)
+    o = np.zeros_like(a)
+    o[1:] = (a[1:] == 1) & (a[:-1] == 0)
+    o[0] = a[0] == 1
+    return o
 
 
-def robust_zscore(x: np.ndarray, eps: float = 1e-9) -> np.ndarray:
-    """Robust z-score using median and MAD."""
-    med = np.nanmedian(x)
-    mad = np.nanmedian(np.abs(x - med)) + eps
-    return 0.6745 * (x - med) / mad
+def yaw_from_quat(q: np.ndarray) -> np.ndarray:
+    """q : [..., 4] au format [x, y, z, w] -> lacet (rad)."""
+    x, y, z, w = q[..., 0], q[..., 1], q[..., 2], q[..., 3]
+    return np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
 
-# ---------------------------
-# Data loading and features
-# ---------------------------
+# ======================================================================
+# Chargement des journaux
+# ======================================================================
+
 
 @dataclass
 class SwarmLogs:
-    times: np.ndarray                 # [T]
-    drone_names: List[str]            # [N]
-    data: Dict[str, np.ndarray]       # key -> [T, N, dim] or [T, N]
+    run_id: str
+    times: np.ndarray  # [T]
+    drone_names: List[str]  # [N]
+    data: Dict[str, np.ndarray]  # cle -> [T, N, d] ou [T, N]
     dt: float
+    notes: List[str] = field(default_factory=list)
+
+
+_MAIN_LOG = re.compile(r"^drone_\d+\.csv$")
 
 
 def _find_drone_logs(log_dir: str) -> List[str]:
-    paths = []
-    for fn in os.listdir(log_dir):
-        if fn.startswith("drone_") and fn.endswith(".csv"):
-            paths.append(os.path.join(log_dir, fn))
-    return sorted(paths)
+    """Journaux principaux drone_<n>.csv uniquement (pas *_filter.csv, *_truth.csv)."""
+    return sorted(os.path.join(log_dir, f) for f in os.listdir(log_dir) if _MAIN_LOG.match(f))
 
 
-def load_swarm_logs(log_dir: str, downsample: int = 1) -> SwarmLogs:
+def find_runs(log_dir: str) -> List[str]:
+    """Un vol (repertoire contenant drone_*.csv) ou un repertoire de vols."""
+    if _find_drone_logs(log_dir):
+        return [log_dir]
+    runs = []
+    for d in sorted(os.listdir(log_dir), key=lambda s: (len(s), s)):
+        p = os.path.join(log_dir, d)
+        if os.path.isdir(p) and _find_drone_logs(p):
+            runs.append(p)
+    if not runs:
+        raise FileNotFoundError(f"Aucun journal drone_*.csv dans {log_dir} ni dans ses sous-repertoires")
+    return runs
+
+
+def _asof(base_t: np.ndarray, df: pd.DataFrame, cols: List[str], direction: str = "nearest") -> np.ndarray:
+    left = pd.DataFrame({"time": base_t})
+    right = df[["time"] + cols].sort_values("time")
+    m = pd.merge_asof(left, right, on="time", direction=direction)
+    return m[cols].to_numpy(dtype=np.float64)
+
+
+def load_run(run_dir: str, downsample: int = 1) -> SwarmLogs:
     """
-    Load drone logs, align by time, return structured arrays.
-
-    Expected columns (from entities/uav.py):
-      time, gt_x,gt_y,gt_z, gt_vx,gt_vy,gt_vz, meas_x,meas_y,meas_z,
-      gnss_error_mag, wind_x,wind_y,wind_z, wind_mag, rep_force_mag,
-      nearest_neighbor_dist, target_x,target_y,target_z, tracking_error_mag, collision_flag
+    Charge un vol : journaux principaux alignes (puis sous-echantillonnes, dans
+    cet ordre), completes par les journaux du filtre (erreur de navigation,
+    erreur GNSS a l'instant de mesure) et de verite (lacet).
     """
-    paths = _find_drone_logs(log_dir)
-    if not paths:
-        raise FileNotFoundError(
-            f"Aucun fichier logs 'drone_*.csv' trouvé dans: {log_dir}"
-        )
-
-    dfs = []
-    names = []
+    paths = _find_drone_logs(run_dir)
+    notes: List[str] = []
+    dfs, names = [], []
     for p in paths:
         df = pd.read_csv(p)
-        # Clean and basic checks
         if "time" not in df.columns:
-            raise ValueError(f"Colonne 'time' absente dans {p}. Colonnes: {list(df.columns)}")
-        df = df.copy()
-        df.sort_values("time", inplace=True)
-        if downsample > 1:
-            df = df.iloc[::downsample].reset_index(drop=True)
-        df.ffill(inplace=True)
-        df.bfill(inplace=True)
+            raise ValueError(f"colonne 'time' absente dans {p}")
+        df["time"] = df["time"].round(3)
+        df = df.drop_duplicates("time").sort_values("time")
         dfs.append(df)
         names.append(os.path.splitext(os.path.basename(p))[0])
 
-    # Align by time (inner join on rounded time)
-    # times are already rounded to 0.001 in logs; still, we align robustly.
-    base = dfs[0][["time"]].copy()
-    base["time"] = base["time"].round(3)
+    common = dfs[0]["time"].to_numpy()
+    for df in dfs[1:]:
+        common = np.intersect1d(common, df["time"].to_numpy())
+    if len(common) < 20:
+        raise ValueError(f"{run_dir} : trop peu d'instants communs ({len(common)})")
+    common = common[:: max(1, int(downsample))]  # aligner PUIS sous-echantillonner
+    dfs = [df.set_index("time").loc[common].reset_index().ffill().bfill() for df in dfs]
+    T, N = len(common), len(dfs)
+    dt = float(np.median(np.diff(common)))
 
-    aligned = [base]
-    for df in dfs:
-        tmp = df.copy()
-        tmp["time"] = tmp["time"].round(3)
-        aligned.append(tmp)
+    def cols(c):
+        return np.stack([df[c].to_numpy(np.float64) for df in dfs], axis=1)
 
-    # Keep intersection of times across all drones
-    common_times = aligned[1]["time"].to_numpy()
-    for k in range(2, len(aligned)):
-        common_times = np.intersect1d(common_times, aligned[k]["time"].to_numpy())
+    data: Dict[str, np.ndarray] = {
+        "pos": np.stack([cols(c) for c in ("gt_x", "gt_y", "gt_z")], axis=-1),
+        "vel": np.stack([cols(c) for c in ("gt_vx", "gt_vy", "gt_vz")], axis=-1),
+        "wind": np.stack([cols(c) for c in ("wind_x", "wind_y", "wind_z")], axis=-1),
+        "contact": cols("collision_flag"),
+    }
+    data["wind_mag"] = np.linalg.norm(data["wind"], axis=-1)
 
-    if len(common_times) < 10:
-        raise ValueError(
-            "Trop peu de timestamps communs entre drones. "
-            "Vérifie que les logs proviennent de la même simulation."
+    nav = np.full((T, N), np.nan)
+    gnss = np.full((T, N), np.nan)
+    yaw = np.full((T, N), np.nan)
+    for i, nm in enumerate(names):
+        fpath = os.path.join(run_dir, f"{nm}_filter.csv")
+        if os.path.exists(fpath):
+            fdf = pd.read_csv(fpath)
+            e = _asof(common, fdf, ["e_px", "e_py", "e_pz"])
+            nav[:, i] = np.linalg.norm(e, axis=1)
+            if "gnss_err" in fdf.columns and fdf["gnss_err"].notna().any():
+                upd = fdf[(fdf.get("gnss_update", 1) == 1) & fdf["gnss_err"].notna()]
+                gnss[:, i] = _asof(common, upd, ["gnss_err"], direction="backward")[:, 0]
+        tpath = os.path.join(run_dir, f"{nm}_truth.csv")
+        if os.path.exists(tpath):
+            tdf = pd.read_csv(tpath)
+            q = _asof(common, tdf, ["qx", "qy", "qz", "qw"])
+            yaw[:, i] = yaw_from_quat(q)
+
+    if np.isnan(nav).all():
+        nav = cols("ekf_pos_error_mag")
+        notes.append("journal du filtre absent : erreur de navigation lue dans le journal principal")
+    if np.isnan(gnss).all():
+        gnss = cols("gnss_error_mag")
+        notes.append(
+            "erreur GNSS a l'instant de mesure absente : valeur du journal principal "
+            "(SURESTIMEE, mesure maintenue entre deux mises a jour)"
         )
+    if np.isnan(yaw).all():
+        v = data["vel"]
+        yaw = np.arctan2(v[..., 1], v[..., 0])
+        notes.append("journal de verite absent : lacet approche par la direction de la vitesse")
 
-    # Reindex each df on common times
-    dfs2 = []
-    for df in dfs:
-        tmp = df.copy()
-        tmp["time"] = tmp["time"].round(3)
-        tmp = tmp.set_index("time").loc[common_times].reset_index()
-        tmp.ffill(inplace=True)
-        tmp.bfill(inplace=True)
-        dfs2.append(tmp)
-
-    times = dfs2[0]["time"].values.astype(np.float32)
-    if len(times) >= 2:
-        dt = float(np.median(np.diff(times)))
-    else:
-        dt = 0.1
-
-    # Stack fields
-    def stack_cols(cols: List[str]) -> np.ndarray:
-        arrs = []
-        for df in dfs2:
-            arr = df[cols].values.astype(np.float32)
-            arrs.append(arr)
-        # arrs: list of [T, len(cols)]
-        return np.stack(arrs, axis=1)  # [T, N, len(cols)]
-
-    def stack_col(col: str) -> np.ndarray:
-        arrs = []
-        for df in dfs2:
-            arr = df[col].values.astype(np.float32)
-            arrs.append(arr)
-        return np.stack(arrs, axis=1)  # [T, N]
-
-    data: Dict[str, np.ndarray] = {}
-    data["gt_pos"] = stack_cols(["gt_x", "gt_y", "gt_z"])
-    data["gt_vel"] = stack_cols(["gt_vx", "gt_vy", "gt_vz"])
-    data["meas_pos"] = stack_cols(["meas_x", "meas_y", "meas_z"])
-    data["wind"] = stack_cols(["wind_x", "wind_y", "wind_z"])
-    data["wind_mag"] = stack_col("wind_mag")
-    data["gnss_error_mag"] = stack_col("gnss_error_mag")
-    data["rep_force_mag"] = stack_col("rep_force_mag")
-    data["nearest_neighbor_dist"] = stack_col("nearest_neighbor_dist")
-    data["target_pos"] = stack_cols(["target_x", "target_y", "target_z"])
-    data["tracking_error_mag"] = stack_col("tracking_error_mag")
-    data["collision_flag_log"] = stack_col("collision_flag")  # from pybullet contact points
-
-    return SwarmLogs(times=times, drone_names=names, data=data, dt=dt)
-
-
-# ---------------------------
-# Failure detection (labels)
-# ---------------------------
-
-@dataclass
-class FailureLabels:
-    # Each is [T, N] (binary)
-    collision: np.ndarray
-    formation_loss: np.ndarray
-    gnss_degradation: np.ndarray
-    wind_loss: np.ndarray
-    suboptimal_traj: np.ndarray
-
-    # aux signals
-    formation_error: np.ndarray      # [T, N]
-    min_pairwise_dist: np.ndarray    # [T, N]
-    speed: np.ndarray                # [T, N]
-
-
-def compute_pairwise_dists(pos: np.ndarray) -> np.ndarray:
-    """pos: [T,N,3] -> dists: [T,N,N]"""
-    T, N, _ = pos.shape
-    d = pos[:, :, None, :] - pos[:, None, :, :]
-    d2 = np.sum(d * d, axis=-1)
-    dist = np.sqrt(np.maximum(d2, 0.0))
-    return dist
-
-
-def detect_failures(
-    logs: SwarmLogs,
-    leader_index: int = 0,
-    collision_dist: float = 0.6,
-    formation_thresh: float = 1.0,
-    gnss_quantile: float = 0.95,
-    wind_quantile: float = 0.95,
-    suboptimal_quantile: float = 0.95,
-    min_persist_steps: int = 5,
-) -> FailureLabels:
-    """
-    Heuristiques de détection:
-    - collision: min distance inter-drones < collision_dist
-    - formation_loss: écart à la formation de référence > formation_thresh
-      (référence = offsets initiaux par rapport au leader)
-    - gnss_degradation: gnss_error_mag > quantile (par drone)
-    - wind_loss: wind_mag > quantile ET dérivée de tracking_error positive
-    - suboptimal_traj: tracking_error_mag > quantile (persistant)
-    """
-    pos = logs.data["gt_pos"]  # [T,N,3]
-    vel = logs.data["gt_vel"]
-    wind_mag = logs.data["wind_mag"]
-    gnss_err = logs.data["gnss_error_mag"]
-    track_err = logs.data["tracking_error_mag"]
-
-    T, N, _ = pos.shape
-
-    # Pairwise distances
-    dists = compute_pairwise_dists(pos)  # [T,N,N]
-    # avoid self by setting diag to +inf
-    for t in range(T):
-        np.fill_diagonal(dists[t], np.inf)
-    min_dist = np.min(dists, axis=-1)  # [T,N]
-
-    collision = (min_dist < collision_dist).astype(np.int32)
-
-    # Formation error relative to leader, reference = initial offsets
-    leader_pos0 = pos[0, leader_index].copy()
-    offsets0 = pos[0] - leader_pos0[None, :]  # [N,3]
-    rel = pos - pos[:, leader_index:leader_index+1, :]  # [T,N,3]
-    formation_error = np.linalg.norm(rel - offsets0[None, :, :], axis=-1)  # [T,N]
-    # leader is always 0 formation error by definition
-    formation_error[:, leader_index] = 0.0
-
-    formation_loss = (formation_error > formation_thresh).astype(np.int32)
-
-    # GNSS degradation per drone quantile
-    gnss_thr = np.quantile(gnss_err, gnss_quantile, axis=0)  # [N]
-    gnss_degradation = (gnss_err > gnss_thr[None, :]).astype(np.int32)
-
-    # Wind loss: high wind + tracking error increasing sharply
-    wind_thr = np.quantile(wind_mag, wind_quantile, axis=0)
-    d_track = np.zeros_like(track_err)
-    d_track[1:] = (track_err[1:] - track_err[:-1]) / max(logs.dt, 1e-6)
-    wind_loss = ((wind_mag > wind_thr[None, :]) & (d_track > 0.5)).astype(np.int32)  # 0.5 m/s as default slope
-
-    # Suboptimal trajectory: high tracking error persistent
-    sub_thr = np.quantile(track_err, suboptimal_quantile, axis=0)
-    suboptimal = (track_err > sub_thr[None, :]).astype(np.int32)
-    # persistence: require min_persist_steps consecutive 1s
-    if min_persist_steps > 1:
-        suboptimal_p = np.zeros_like(suboptimal)
-        for i in range(N):
-            run = 0
-            for t in range(T):
-                if suboptimal[t, i] == 1:
-                    run += 1
-                else:
-                    run = 0
-                if run >= min_persist_steps:
-                    suboptimal_p[t, i] = 1
-        suboptimal = suboptimal_p
-
-    speed = np.linalg.norm(vel, axis=-1)  # [T,N]
-
-    return FailureLabels(
-        collision=collision,
-        formation_loss=formation_loss,
-        gnss_degradation=gnss_degradation,
-        wind_loss=wind_loss,
-        suboptimal_traj=suboptimal,
-        formation_error=formation_error.astype(np.float32),
-        min_pairwise_dist=min_dist.astype(np.float32),
-        speed=speed.astype(np.float32),
+    data["nav_err"] = np.nan_to_num(pd.DataFrame(nav).ffill().bfill().to_numpy(), nan=0.0)
+    data["gnss_err"] = np.nan_to_num(pd.DataFrame(gnss).ffill().bfill().to_numpy(), nan=0.0)
+    data["yaw"] = pd.DataFrame(yaw).ffill().bfill().to_numpy()
+    return SwarmLogs(
+        run_id=os.path.basename(os.path.normpath(run_dir)),
+        times=common,
+        drone_names=names,
+        data=data,
+        dt=dt,
+        notes=notes,
     )
 
 
-# ---------------------------
-# NRI model (PyTorch)
-# ---------------------------
+def load_runs(log_dir, downsample: int = 1) -> List[SwarmLogs]:
+    """Un ou plusieurs repertoires (campagnes) ; identifiant 'campagne/vol' si plusieurs."""
+    dirs = [log_dir] if isinstance(log_dir, str) else list(log_dir)
+    runs = []
+    for d in dirs:
+        for r in find_runs(d):
+            lg = load_run(r, downsample)
+            if len(dirs) > 1:
+                lg.run_id = f"{os.path.basename(os.path.normpath(d))}/{lg.run_id}"
+            runs.append(lg)
+    names = runs[0].drone_names
+    runs = [r for r in runs if r.drone_names == names]
+    return runs
+
+
+# ======================================================================
+# Structure connue de l'essaim (pour VERIFIER le graphe NRI)
+# ======================================================================
+
+
+@dataclass
+class SwarmStructure:
+    leader: Optional[int]
+    followers: List[int]
+    independents: List[int]
+    source: str
+
+    def known_adjacency(self, n: int) -> np.ndarray:
+        """
+        A[i, j] (recepteur i, emetteur j) : 1 = influence attendue, 0 = aucune,
+        NaN = indetermine (suiveur <-> suiveur : separation, active seulement
+        quand ils se rapprochent).
+        """
+        A = np.zeros((n, n))
+        np.fill_diagonal(A, np.nan)
+        if self.leader is not None:
+            for f in self.followers:
+                A[f, self.leader] = 1.0
+        for a in self.followers:
+            for b in self.followers:
+                if a != b:
+                    A[a, b] = np.nan
+        return A
+
+
+def swarm_structure(config_path: Optional[str], names: List[str], leader_index: int = 0) -> SwarmStructure:
+    if config_path and os.path.exists(config_path) and yaml is not None:
+        cfg = yaml.safe_load(open(config_path, encoding="utf-8"))
+        swarms = cfg.get("swarm") or []
+        agents = {a.get("name"): a for a in cfg.get("agents", [])}
+        if swarms:
+            sw = swarms[0]
+            members = [nm for nm in names if (agents.get(nm) or {}).get("swarm_id") == sw.get("id")]
+            leader = names.index(sw["leader"]) if sw.get("leader") in names else None
+            followers = [names.index(m) for m in members if names.index(m) != leader]
+            indep = [i for i in range(len(names)) if i != leader and i not in followers]
+            return SwarmStructure(leader, followers, indep, f"config ({os.path.basename(config_path)})")
+    others = [i for i in range(len(names)) if i != leader_index]
+    return SwarmStructure(leader_index, others, [], "hypothese : leader_index, tous les autres suiveurs")
+
+
+# ======================================================================
+# Defaillances (variables a expliquer)
+# ======================================================================
+
+
+@dataclass
+class Outcomes:
+    active: Dict[str, np.ndarray]  # [T, N] binaire, apres stabilisation
+    continuous: Dict[str, np.ndarray]  # [T, N] grandeur continue sous-jacente
+    applicable: Dict[str, np.ndarray]  # [N] booleen : la defaillance a-t-elle un sens pour ce drone ?
+
+
+def formation_error(logs: SwarmLogs, st: SwarmStructure, settle_s: float) -> np.ndarray:
+    """
+    Ecart de chaque suiveur a sa place, dans le REPERE DU LEADER.
+    La place est la mediane de la position relative (repere leader) apres
+    stabilisation : c'est la formation que l'essaim tient reellement, ce qui
+    rend la mesure independante de la regle de formation utilisee.
+    """
+    T, N = logs.data["pos"].shape[:2]
+    err = np.zeros((T, N))
+    if st.leader is None or not st.followers:
+        return err
+    L = st.leader
+    p = logs.data["pos"]
+    psi = logs.data["yaw"][:, L]
+    c, s = np.cos(psi), np.sin(psi)
+    settled = logs.times >= settle_s
+    if settled.sum() < 5:
+        settled = np.ones(T, bool)
+    for f in st.followers:
+        d = p[:, f, :2] - p[:, L, :2]
+        body = np.stack([c * d[:, 0] + s * d[:, 1], -s * d[:, 0] + c * d[:, 1]], axis=1)
+        slot = np.median(body[settled], axis=0)
+        world = np.stack([c * slot[0] - s * slot[1], s * slot[0] + c * slot[1]], axis=1)
+        e_xy = d - world
+        e_z = p[:, f, 2] - p[:, L, 2]
+        err[:, f] = np.sqrt((e_xy**2).sum(axis=1) + e_z**2)
+    return err
+
+
+def compute_outcomes(logs: SwarmLogs, st: SwarmStructure, a: argparse.Namespace) -> Outcomes:
+    T, N = logs.data["pos"].shape[:2]
+
+    def k(sec):
+        """Duree [s] -> nombre de pas."""
+        return max(1, int(round(sec / logs.dt)))
+
+    settled = (logs.times >= a.settle_time)[:, None]
+
+    fe = formation_error(logs, st, a.settle_time)
+    p = logs.data["pos"]
+    d = np.linalg.norm(p[:, :, None, :] - p[:, None, :, :], axis=-1)
+    idx = np.arange(N)
+    d[:, idx, idx] = np.inf
+    min_d = d.min(axis=-1)
+    airborne = p[..., 2] > 0.3
+
+    active = {
+        "formation_loss": persist(fe > a.formation_thresh, k(a.formation_persist)) * settled,
+        "nav_degradation": persist(logs.data["nav_err"] > a.nav_thresh, k(a.nav_persist)) * settled,
+        "near_miss": ((min_d < a.near_miss_dist) & airborne).astype(np.int8) * settled,
+    }
+    is_f = np.zeros(N, bool)
+    is_f[st.followers] = True
+    applicable = {"formation_loss": is_f, "nav_degradation": np.ones(N, bool), "near_miss": np.ones(N, bool)}
+    for kk in active:
+        active[kk] = (active[kk] * applicable[kk][None, :]).astype(np.int8)
+    continuous = {
+        "formation_loss": fe,
+        "nav_degradation": logs.data["nav_err"],
+        "near_miss": -np.where(np.isfinite(min_d), min_d, 1e3),
+    }
+    return Outcomes(active=active, continuous=continuous, applicable=applicable)
+
+
+# ======================================================================
+# Causes candidates (facteurs exogenes)
+# ======================================================================
+
+
+def leader_maneuver(logs: SwarmLogs, st: SwarmStructure, smooth_s: float = 0.25) -> np.ndarray:
+    """Acceleration horizontale du leader, attribuee a ses suiveurs (0 ailleurs)."""
+    T, N = logs.data["pos"].shape[:2]
+    out = np.zeros((T, N))
+    if st.leader is None:
+        return out
+    v = logs.data["vel"][:, st.leader, :2]
+    acc = np.zeros_like(v)
+    acc[1:] = np.diff(v, axis=0) / max(logs.dt, 1e-6)
+    w = max(1, int(round(smooth_s / logs.dt)))
+    a_mag = pd.Series(np.linalg.norm(acc, axis=1)).rolling(w, min_periods=1).mean().to_numpy()
+    for f in st.followers:
+        out[:, f] = a_mag
+    return out
+
+
+def interaction_pressure(logs: SwarmLogs, edge_probs: np.ndarray, eps: float = 0.1) -> np.ndarray:
+    """Somme des voisins j ponderee par l'arete NRI j->i, divisee par la distance."""
+    p = logs.data["pos"]
+    d = np.linalg.norm(p[:, :, None, :] - p[:, None, :, :], axis=-1)
+    N = d.shape[1]
+    d[:, np.arange(N), np.arange(N)] = np.inf
+    return np.sum(edge_probs[None, :, :] / (d + eps), axis=-1)
+
+
+def compute_factors(logs: SwarmLogs, st: SwarmStructure, edge_probs: np.ndarray) -> Dict[str, np.ndarray]:
+    return {
+        "wind": logs.data["wind_mag"],
+        "gnss": logs.data["gnss_err"],
+        "leader_maneuver": leader_maneuver(logs, st),
+        "interaction": interaction_pressure(logs, edge_probs),
+    }
+
+
+# ======================================================================
+# NRI (Kipf et al. 2018)
+# ======================================================================
+
 
 class MLP(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, dropout: float = 0.0):
+    def __init__(self, i, h, o, dropout=0.0):
         super().__init__()
-        self.fc1 = nn.Linear(in_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, out_dim)
+        self.fc1, self.fc2, self.bn = nn.Linear(i, h), nn.Linear(h, o), nn.LayerNorm(o)
         self.dropout = dropout
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        if self.dropout > 0:
-            x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.fc2(x)
-        return x
+        x = F.elu(self.fc1(x))
+        x = F.dropout(x, self.dropout, self.training)
+        return self.bn(F.elu(self.fc2(x)))
 
 
-def gumbel_softmax_sample(logits, tau=1.0, eps=1e-10):
-    U = torch.rand_like(logits)
-    g = -torch.log(-torch.log(U + eps) + eps)
-    y = logits + g
-    return F.softmax(y / tau, dim=-1)
-
-
-def gumbel_softmax(logits, tau=1.0, hard=False):
-    y = gumbel_softmax_sample(logits, tau=tau)
-    if not hard:
-        return y
-    # straight-through
-    shape = y.size()
-    _, ind = y.max(dim=-1)
-    y_hard = torch.zeros_like(y).view(-1, shape[-1])
-    y_hard.scatter_(1, ind.view(-1, 1), 1)
-    y_hard = y_hard.view(*shape)
-    y = (y_hard - y).detach() + y
-    return y
-
-
-def build_offdiag_indices(n: int, device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Return sender/receiver indices for all directed edges excluding self edges.
-    """
-    offdiag = np.ones((n, n)) - np.eye(n)
-    receivers, senders = np.where(offdiag)
-    receivers = torch.tensor(receivers, dtype=torch.long, device=device)
-    senders = torch.tensor(senders, dtype=torch.long, device=device)
-    return senders, receivers  # E each
+def edge_index(n: int):
+    off = np.ones((n, n)) - np.eye(n)
+    recv, send = np.where(off)
+    return torch.tensor(send, dtype=torch.long), torch.tensor(recv, dtype=torch.long)
 
 
 class NRIEncoder(nn.Module):
-    """
-    Classic NRI-ish encoder: encode node trajectories, then infer edge type logits.
+    """Encodeur MLP de NRI : noeud -> arete -> noeud -> arete, sur la fenetre ENTIERE."""
 
-    Input x: [B, L, N, D_in]
-    """
-    def __init__(self, n_nodes: int, d_in: int, hidden: int, n_edge_types: int, dropout: float = 0.0):
+    def __init__(self, n_in, hidden, k, dropout=0.0):
         super().__init__()
-        self.n_nodes = n_nodes
-        self.d_in = d_in
-        self.hidden = hidden
-        self.n_edge_types = n_edge_types
-        # Node embedding from flattened temporal window
-        self.node_mlp = MLP(in_dim=d_in, hidden_dim=hidden, out_dim=hidden, dropout=dropout)
-        # Edge MLP from concatenated sender/receiver node embeddings + difference
-        self.edge_mlp = MLP(in_dim=3*hidden, hidden_dim=hidden, out_dim=n_edge_types, dropout=dropout)
+        self.mlp1 = MLP(n_in, hidden, hidden, dropout)
+        self.mlp2 = MLP(2 * hidden, hidden, hidden, dropout)
+        self.mlp3 = MLP(hidden, hidden, hidden, dropout)
+        self.mlp4 = MLP(3 * hidden, hidden, hidden, dropout)
+        self.out = nn.Linear(hidden, k)
 
-    def forward(self, x_flat: torch.Tensor, senders: torch.Tensor, receivers: torch.Tensor):
-        """
-        x_flat: [B, N, D_in] (already aggregated across time, e.g. mean/flatten+MLP)
-        """
-        B, N, D = x_flat.shape
-        assert N == self.n_nodes
-
-        h = self.node_mlp(x_flat)  # [B,N,H]
-        h_send = h[:, senders, :]  # [B,E,H]
-        h_recv = h[:, receivers, :]
-        h_diff = h_send - h_recv
-        edge_in = torch.cat([h_send, h_recv, h_diff], dim=-1)  # [B,E,3H]
-        logits = self.edge_mlp(edge_in)  # [B,E,K]
-        return logits
+    def forward(self, x, send, recv, n):
+        # x : [B, N, L*S]
+        h = self.mlp1(x)
+        e = self.mlp2(torch.cat([h[:, send], h[:, recv]], -1))
+        skip = e
+        agg = torch.zeros(x.shape[0], n, e.shape[-1], dtype=e.dtype)
+        agg.index_add_(1, recv, e)
+        h2 = self.mlp3(agg / max(n - 1, 1))
+        e2 = self.mlp4(torch.cat([h2[:, send], h2[:, recv], skip], -1))
+        return self.out(e2)  # [B, E, K]
 
 
 class NRIDecoder(nn.Module):
     """
-    Message passing decoder for next-step prediction.
+    Decodeur a passage de messages, qui predit la vitesse au pas suivant.
 
-    Given current state s_t, exog u_t, and edges z_ij (soft one-hot over K),
-    predict delta (residual) to produce s_{t+1}.
+    - Le type d'arete 0 ne produit AUCUN message : c'est une vraie "non-arete"
+      (skip_first de l'article).
+    - Un message j -> i ne voit que des grandeurs RELATIVES (position et vitesse
+      de j par rapport a i) : rien ne couple artificiellement deux drones
+      (un centrage sur l'essaim instant par instant le ferait).
+    - L'etat propre d'un noeud est sa vitesse, son altitude, son CAP et ses vitesses aux
+      `hist` pas precedents. Sans ce passe propre, la position des suiveurs (qui
+      suivent le leader avec retard) trahit la manoeuvre recente du leader : le
+      modele "decouvre" alors une influence suiveurs -> leader, predictive mais
+      pas causale (piege classique de la causalite au sens de Granger). Le cap
+      est necessaire pour la meme raison : la formation est orientee selon le
+      cap du leader, donc la position des suiveurs revele ce cap.
     """
-    def __init__(self, n_nodes: int, state_dim: int, exog_dim: int, hidden: int, n_edge_types: int, dropout: float = 0.0):
+
+    def __init__(self, u_dim, hidden, k, dropout=0.0, hist=2):
         super().__init__()
-        self.n_nodes = n_nodes
-        self.state_dim = state_dim
-        self.exog_dim = exog_dim
+        self.k = k
+        self.msg = nn.ModuleList(
+            [
+                nn.Sequential(nn.Linear(9, hidden), nn.ReLU(), nn.Linear(hidden, hidden), nn.ReLU())
+                for _ in range(k)
+            ]
+        )
+        self.hist = hist
+        self.node = nn.Sequential(
+            nn.Linear(6 + 3 * hist + u_dim + hidden, hidden),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, 3),
+        )
         self.hidden = hidden
-        self.n_edge_types = n_edge_types
 
-        # Per-edge-type message networks
-        self.msg_mlps = nn.ModuleList([
-            MLP(in_dim=2*state_dim, hidden_dim=hidden, out_dim=hidden, dropout=dropout)
-            for _ in range(n_edge_types)
-        ])
-        # Node update
-        self.node_mlp = MLP(in_dim=state_dim + exog_dim + hidden, hidden_dim=hidden, out_dim=state_dim, dropout=dropout)
-
-    def forward(self, s: torch.Tensor, u: torch.Tensor, z: torch.Tensor,
-                senders: torch.Tensor, receivers: torch.Tensor) -> torch.Tensor:
+    def forward(self, x, u, z, send, recv, perm_edge=None, perm_idx=None, vh=None):
         """
-        s: [B,N,S]
-        u: [B,N,U]
-        z: [B,E,K] soft edges over K types
-        -> s_next_pred: [B,N,S]
+        x : [B, N, 8] = position (3), vitesse (3), cos/sin du cap, a l'echelle.
+        vh : [B, N, 3*hist] vitesses propres aux pas precedents.
+        perm_edge / perm_idx : pour l'importance par permutation, les grandeurs
+        RELATIVES de l'arete perm_edge (vitesse et position de l'emetteur par
+        rapport au recepteur) sont prises dans une autre fenetre (perm_idx),
+        l'arete et son poids restant inchanges. On permute les grandeurs
+        relatives et non l'etat absolu de l'emetteur : un etat absolu pris a un
+        autre instant placerait l'emetteur a des dizaines de metres, ecart
+        relatif jamais vu a l'entrainement : l'"importance" mesurerait alors la
+        sensibilite du decodeur hors distribution, pas l'information utilisee.
         """
-        B, N, S = s.shape
-        E = senders.shape[0]
+        B, N, _ = x.shape
+        p, v, head = x[..., :3], x[..., 3:6], x[..., 6:8]
+        rel = torch.cat([v[:, send] - v[:, recv], p[:, send] - p[:, recv]], -1)
+        if perm_edge is not None:
+            rel = rel.clone()
+            rel[:, perm_edge] = rel[perm_idx, perm_edge]
+        pair = torch.cat([v[:, recv], rel], -1)
+        agg = torch.zeros(B, N, self.hidden, dtype=x.dtype)
+        for t in range(1, self.k):  # type 0 : pas de message
+            agg.index_add_(1, recv, z[..., t : t + 1] * self.msg[t](pair))
+        return v + self.node(torch.cat([v, p[..., 2:3], head, vh, u, agg], -1))
 
-        s_send = s[:, senders, :]  # [B,E,S]
-        s_recv = s[:, receivers, :]  # [B,E,S]
-        edge_feat = torch.cat([s_send, s_recv], dim=-1)  # [B,E,2S]
-
-        # Compute messages for each edge type, weighted by z
-        msg_all = 0.0
-        for k in range(self.n_edge_types):
-            msg_k = self.msg_mlps[k](edge_feat)  # [B,E,H]
-            w = z[..., k:k+1]  # [B,E,1]
-            msg_all = msg_all + w * msg_k
-
-        # Aggregate messages per receiver
-        agg = torch.zeros((B, N, self.hidden), device=s.device, dtype=s.dtype)  # [B,N,H]
-        agg.index_add_(1, receivers, msg_all)  # sum over incoming edges
-
-        node_in = torch.cat([s, u, agg], dim=-1)  # [B,N,S+U+H]
-        delta = self.node_mlp(node_in)  # [B,N,S]
-        s_next = s + delta
-        return s_next
-
-
-class NRIModel(nn.Module):
-    def __init__(self, n_nodes: int, state_dim: int, exog_dim: int,
-                 hidden: int = 128, n_edge_types: int = 3, dropout: float = 0.0):
-        super().__init__()
-        self.n_nodes = n_nodes
-        self.state_dim = state_dim
-        self.exog_dim = exog_dim
-        self.hidden = hidden
-        self.n_edge_types = n_edge_types
-
-        # Encoder takes aggregated temporal node features; we pass mean over window of (pos,vel)
-        self.encoder = NRIEncoder(n_nodes=n_nodes, d_in=state_dim, hidden=hidden, n_edge_types=n_edge_types, dropout=dropout)
-        self.decoder = NRIDecoder(n_nodes=n_nodes, state_dim=state_dim, exog_dim=exog_dim, hidden=hidden, n_edge_types=n_edge_types, dropout=dropout)
-
-    def infer_edges(self, s_window: torch.Tensor, senders: torch.Tensor, receivers: torch.Tensor,
-                    tau: float = 0.5, hard: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        s_window: [B,L,N,S] -> aggregate -> [B,N,S]
-        returns:
-          z: [B,E,K] soft/hard one-hot
-          logits: [B,E,K]
-        """
-        # simple aggregation: mean over time
-        s_mean = torch.mean(s_window, dim=1)  # [B,N,S]
-        logits = self.encoder(s_mean, senders, receivers)
-        z = gumbel_softmax(logits, tau=tau, hard=hard)
-        return z, logits
-
-    def forward(self, s_window: torch.Tensor, u_window: torch.Tensor,
-                senders: torch.Tensor, receivers: torch.Tensor,
-                tau: float = 0.5, hard: bool = False) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        s_window: [B,L,N,S]
-        u_window: [B,L,N,U]
-        Predict next steps within window: for t in [0..L-2], predict s_{t+1} from s_t,u_t,edges
-        Returns:
-          s_pred: [B,L-1,N,S]
-          z: [B,E,K]
-          logits: [B,E,K]
-        """
-        z, logits = self.infer_edges(s_window, senders, receivers, tau=tau, hard=hard)
-        B, L, N, S = s_window.shape
-        preds = []
-        s_t = s_window[:, 0, :, :]
-        for t in range(L-1):
-            u_t = u_window[:, t, :, :]
-            s_next = self.decoder(s_t, u_t, z, senders, receivers)
-            preds.append(s_next)
-            s_t = s_window[:, t+1, :, :]  # teacher forcing
-        s_pred = torch.stack(preds, dim=1)  # [B,L-1,N,S]
-        return s_pred, z, logits
-
-
-# ---------------------------
-# Preparing sequences
-# ---------------------------
-
-@dataclass
-class SequenceDataset:
-    s: np.ndarray  # [T,N,S]
-    u: np.ndarray  # [T,N,U]
-    times: np.ndarray  # [T]
-
-    def sample_windows(self, seq_len: int, n_samples: int, rng: np.random.RandomState) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Return windows (s_window,u_window) with shape:
-          s_win: [B,L,N,S], u_win: [B,L,N,U]
-        """
-        T = self.s.shape[0]
-        if T <= seq_len + 1:
-            raise ValueError(f"Not enough timesteps T={T} for seq_len={seq_len}")
-
-        starts = rng.randint(0, T - seq_len, size=n_samples)
-        s_w = np.stack([self.s[i:i+seq_len] for i in starts], axis=0)
-        u_w = np.stack([self.u[i:i+seq_len] for i in starts], axis=0)
-        return s_w, u_w
-
-
-def build_sequence_dataset(logs: SwarmLogs, use_measured: bool = False) -> SequenceDataset:
-    """
-    s: state used by NRI (pos, vel). Default uses ground truth.
-    u: exogenous (wind vector + gnss_error_mag) by drone.
-    """
-    if use_measured:
-        pos = logs.data["meas_pos"]
-        # approximate vel from finite difference
-        vel = np.zeros_like(pos)
-        vel[1:] = (pos[1:] - pos[:-1]) / max(logs.dt, 1e-6)
-    else:
-        pos = logs.data["gt_pos"]
-        vel = logs.data["gt_vel"]
-
-    s = np.concatenate([pos, vel], axis=-1)  # [T,N,6]
-    wind = logs.data["wind"]  # [T,N,3]
-    gnss = logs.data["gnss_error_mag"][..., None]  # [T,N,1]
-    u = np.concatenate([wind, gnss], axis=-1)  # [T,N,4]
-    return SequenceDataset(s=s.astype(np.float32), u=u.astype(np.float32), times=logs.times.astype(np.float32))
-
-
-# ---------------------------
-# Train NRI
-# ---------------------------
 
 @dataclass
 class NRIResults:
-    edge_probs: np.ndarray       # [N,N] probability of "some interaction" (1 - p(no-edge))
-    edge_type_probs: np.ndarray  # [K,N,N] probability of each edge type
-    signed_influence: np.ndarray # [N,N] signed influence (heuristic sign * edge_probs)
-    nri_loss_curve: List[float]
+    edge_probs: np.ndarray  # [N, N] moyenne sur les graines de 1 - p(type 0)
+    edge_probs_std: np.ndarray  # [N, N] ecart-type entre graines
+    importance: np.ndarray  # [N, N] hausse relative de l'erreur de i, etat de j permute
+    importance_std: np.ndarray
+    loss_curves: List[List[float]]
+    heldout: Dict[str, float]  # MSE vols non vus : avec graphe / sans aretes
+    validation: Dict[str, object]  # comparaison au graphe connu
 
 
-def train_nri(
-    dataset: SequenceDataset,
-    n_nodes: int,
-    seq_len: int = 30,
-    n_edge_types: int = 3,
-    hidden: int = 128,
-    dropout: float = 0.0,
-    batch_size: int = 64,
-    nri_steps: int = 2000,
-    lr: float = 3e-4,
-    tau_start: float = 1.0,
-    tau_end: float = 0.5,
-    tau_anneal_steps: int = 1500,
-    max_train_windows: int = 5000,
-    device: str = "cpu",
-    torch_threads: int = 1,
-    seed: int = 0,
-    verbose_every: int = 100,
-) -> NRIResults:
-    set_seed(seed)
-    dev = torch.device(device)
-    set_torch_threads(torch_threads)
-
-    S = dataset.s.shape[-1]
-    U = dataset.u.shape[-1]
-
-    model = NRIModel(n_nodes=n_nodes, state_dim=S, exog_dim=U, hidden=hidden,
-                     n_edge_types=n_edge_types, dropout=dropout).to(dev)
-    opt = torch.optim.Adam(model.parameters(), lr=lr)
-
-    senders, receivers = build_offdiag_indices(n_nodes, dev)
-
-    # Standardize s and u (important for stable training)
-    s_flat = dataset.s.reshape(-1, S)
-    u_flat = dataset.u.reshape(-1, U)
-    s_scaler = StandardScaler().fit(s_flat)
-    u_scaler = StandardScaler().fit(u_flat)
-
-    s_std = s_scaler.transform(s_flat).reshape(dataset.s.shape).astype(np.float32)
-    u_std = u_scaler.transform(u_flat).reshape(dataset.u.shape).astype(np.float32)
-    ds_std = SequenceDataset(s=s_std, u=u_std, times=dataset.times)
-
-    rng = np.random.RandomState(seed)
-    loss_curve: List[float] = []
-
-    # training windows reservoir
-    n_windows = min(max_train_windows, max(1000, batch_size * 10))
-    # Pour accélérer: on fait du one-step prediction (fenêtre seq_len+1, on prédit uniquement la dernière transition)
-    s_w_all, u_w_all = ds_std.sample_windows(seq_len=seq_len + 1, n_samples=n_windows, rng=rng)
-
-    s_w_all_t = torch.from_numpy(s_w_all).to(dev)
-    u_w_all_t = torch.from_numpy(u_w_all).to(dev)
-
-    model.train()
-    for step in range(1, nri_steps + 1):
-        # anneal tau
-        if step <= tau_anneal_steps:
-            tau = tau_start + (tau_end - tau_start) * (step / tau_anneal_steps)
-        else:
-            tau = tau_end
-
-        idx = rng.randint(0, n_windows, size=batch_size)
-        s_win = s_w_all_t[idx]  # [B,L+1,N,S]
-        u_win = u_w_all_t[idx]
-
-        # Contexte pour inférer le graphe latent
-        s_ctx = s_win[:, :seq_len, :, :]   # [B,L,N,S]
-        # Exogènes (ici utilisés uniquement au temps t de la transition)
-        s_t = s_win[:, seq_len - 1, :, :]  # [B,N,S]
-        u_t = u_win[:, seq_len - 1, :, :]  # [B,N,U]
-        target = s_win[:, seq_len, :, :]   # [B,N,S]
-
-        z, logits = model.infer_edges(s_ctx, senders, receivers, tau=tau, hard=False)
-        s_pred = model.decoder(s_t, u_t, z, senders, receivers)
-
-        loss = F.mse_loss(s_pred, target)
-        opt.zero_grad(set_to_none=True)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
-        opt.step()
-
-        loss_curve.append(float(loss.item()))
-        if verbose_every and (step % verbose_every == 0 or step == 1):
-            print(f"[NRI] step={step:5d}/{nri_steps}  tau={tau:.3f}  mse={loss.item():.6f}")
-
-    # infer edge probabilities by running encoder over many windows
-    model.eval()
-    with torch.no_grad():
-        B_eval = min(1024, n_windows)
-        idx = rng.choice(n_windows, size=B_eval, replace=False)
-        s_win = s_w_all_t[idx][:, :seq_len, :, :]
-        # use hard=False to estimate probabilities, then average
-        z, logits = model.infer_edges(s_win, senders, receivers, tau=tau_end, hard=False)  # [B,E,K]
-        z_mean = torch.mean(z, dim=0)  # [E,K]
-        z_mean = to_numpy(z_mean)  # [E,K]
-
-    # Build adjacency matrices
-    N = n_nodes
-    K = n_edge_types
-    edge_type_probs = np.zeros((K, N, N), dtype=np.float32)
-    edge_probs = np.zeros((N, N), dtype=np.float32)
-
-    E = len(senders)
-    send_np = to_numpy(senders).astype(int)
-    recv_np = to_numpy(receivers).astype(int)
-    for e in range(E):
-        j = send_np[e]
-        i = recv_np[e]
-        for k in range(K):
-            edge_type_probs[k, i, j] = float(z_mean[e, k])
-        # interaction probability = 1 - p(no-edge) ; we assume type 0 = no edge by convention
-        edge_probs[i, j] = float(1.0 - z_mean[e, 0])
-
-    # Signed influence heuristic from data: if i tends to accelerate away from j -> repulsive
-    signed = estimate_signed_influence(dataset.s, edge_probs, leader_index=0)
-
-    return NRIResults(
-        edge_probs=edge_probs,
-        edge_type_probs=edge_type_probs,
-        signed_influence=signed,
-        nri_loss_curve=loss_curve,
-    )
-
-
-def estimate_signed_influence(states: np.ndarray, edge_probs: np.ndarray, leader_index: int = 0) -> np.ndarray:
+def nri_dataset(runs: List[SwarmLogs], nri_dt: float, settle_s: float = 0.0):
     """
-    Heuristique de "sens" (repulsif / attractif) basée sur la dynamique :
-    - states: [T,N,6] = pos(3)+vel(3)
-    - on approxime a_i ~ dv_i/dt et on regarde le signe moyen de dot(a_i, (p_i - p_j))
-      >0 : accélère en s'éloignant de j (repulsif)
-      <0 : accélère vers j (attractif)
+    Par vol : x = [position, vitesse, cos cap, sin cap] [T, N, 8] et
+    u = [vent, erreur GNSS] [T, N, 4].
+    La position est centree par une CONSTANTE propre au vol (pas par le centre de
+    l'essaim instant par instant, qui couplerait les drones entre eux).
+    Le decollage est exclu : tous les drones partent au meme instant, et cette
+    horloge commune ferait "predire" la montee d'un drone independant par celle
+    des autres (cause commune, pas interaction).
     """
-    pos = states[..., :3]
-    vel = states[..., 3:6]
-    T, N, _ = pos.shape
-
-    # finite difference acceleration (dt not known here; sign doesn't need scale)
-    acc = np.zeros_like(vel)
-    acc[1:] = vel[1:] - vel[:-1]
-
-    signed = np.zeros((N, N), dtype=np.float32)
-    for i in range(N):
-        for j in range(N):
-            if i == j:
-                continue
-            rel = pos[:, i, :] - pos[:, j, :]  # [T,3]
-            dot = np.sum(acc[:, i, :] * rel, axis=-1)  # [T]
-            denom = np.sum(rel * rel, axis=-1) + 1e-6
-            score = np.nanmean(dot / denom)
-            sign = 1.0 if score > 0 else -1.0
-            signed[i, j] = sign * float(edge_probs[i, j])
-    return signed
-
-
-# ---------------------------
-# Exogenous causal scores (Granger) + Event models
-# ---------------------------
-
-@dataclass
-class GrangerResults:
-    # dict[event][factor] -> [N] scores in [0,1] (1 = strong evidence factor Granger-causes event)
-    scores: Dict[str, Dict[str, np.ndarray]]
-    # pvalues min
-    min_pvalues: Dict[str, Dict[str, np.ndarray]]
-
-
-def safe_granger_score(x: np.ndarray, y: np.ndarray, maxlag: int = 5) -> Tuple[float, float]:
-    """
-    Granger test y ~ past(y,x) -> does x help predict y?
-    Returns (score, min_pvalue). Score is mapped as 1 - min_pvalue (clipped).
-    """
-    try:
-        # requires shape [T,2] with columns [y, x] for tests "x causes y"
-        data = np.column_stack([y, x]).astype(np.float64)
-        # statsmodels prints by default; silence it
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            res = grangercausalitytests(data, maxlag=maxlag, verbose=False)
-        pvals = []
-        for lag, out in res.items():
-            # F-test pvalue
-            pvals.append(out[0]["ssr_ftest"][1])
-        min_p = float(np.min(pvals))
-        score = float(np.clip(1.0 - min_p, 0.0, 1.0))
-        return score, min_p
-    except Exception:
-        return 0.0, 1.0
-
-
-def compute_granger(logs: SwarmLogs, labels: FailureLabels, maxlag: int = 5) -> GrangerResults:
-    """
-    Compute Granger-like evidence that wind/GNSS predict events.
-    """
-    wind = logs.data["wind_mag"]  # [T,N]
-    gnss = logs.data["gnss_error_mag"]
-    events = {
-        "collision": labels.collision,
-        "formation_loss": labels.formation_loss,
-        "gnss_degradation": labels.gnss_degradation,
-        "wind_loss": labels.wind_loss,
-        "suboptimal_traj": labels.suboptimal_traj,
-    }
-    factors = {
-        "wind_mag": wind,
-        "gnss_error_mag": gnss,
-    }
-
-    scores: Dict[str, Dict[str, np.ndarray]] = {}
-    min_pvals: Dict[str, Dict[str, np.ndarray]] = {}
-    for ev_name, ev in events.items():
-        scores[ev_name] = {}
-        min_pvals[ev_name] = {}
-        for fac_name, fac in factors.items():
-            N = ev.shape[1]
-            sc = np.zeros(N, dtype=np.float32)
-            pv = np.ones(N, dtype=np.float32)
-            for i in range(N):
-                s, p = safe_granger_score(fac[:, i], ev[:, i], maxlag=maxlag)
-                sc[i] = s
-                pv[i] = p
-            scores[ev_name][fac_name] = sc
-            min_pvals[ev_name][fac_name] = pv
-    return GrangerResults(scores=scores, min_pvalues=min_pvals)
-
-
-@dataclass
-class EventModelOutputs:
-    # predicted probabilities per event type [T,N]
-    proba: Dict[str, np.ndarray]
-    # per-event instance explanations
-    event_causes: List[Dict]
-    # global average cause probs per event type and per drone
-    avg_causes: Dict[str, Dict[str, List[float]]]
-
-
-def build_interaction_pressure(pos: np.ndarray, edge_probs: np.ndarray, eps: float = 1e-3) -> np.ndarray:
-    """
-    Scalar feature per drone representing "pressure" from neighbors weighted by inferred edges.
-    pressure_i = sum_j edge_prob[i<-j] / (dist_ij + eps)
-    """
-    dists = compute_pairwise_dists(pos)  # [T,N,N]
-    T, N, _ = dists.shape
-    for t in range(T):
-        np.fill_diagonal(dists[t], np.inf)
-    inv = 1.0 / (dists + eps)
-    w = edge_probs[None, :, :]  # [1,N,N] receiver i, sender j
-    pressure = np.sum(w * inv, axis=-1)  # [T,N]
-    return pressure.astype(np.float32)
-
-
-def fit_event_models(
-    logs: SwarmLogs,
-    labels: FailureLabels,
-    edge_probs: np.ndarray,
-    horizon_lag: int = 1,
-    max_events_to_explain: int = 2000,
-    seed: int = 0,
-) -> EventModelOutputs:
-    """
-    Fit simple per-event logistic regression models to predict event(t) from features(t-lag).
-    Then convert coefficient contributions into per-event root-cause probability distribution.
-    """
-    rng = np.random.RandomState(seed)
-
-    pos = logs.data["gt_pos"]
-    wind = logs.data["wind_mag"]
-    gnss = logs.data["gnss_error_mag"]
-    repf = logs.data["rep_force_mag"]
-    track = logs.data["tracking_error_mag"]
-    formerr = labels.formation_error
-    mindist = labels.min_pairwise_dist
-
-    interaction_pressure = build_interaction_pressure(pos, edge_probs)  # [T,N]
-
-    events = {
-        "collision": labels.collision,
-        "formation_loss": labels.formation_loss,
-        "gnss_degradation": labels.gnss_degradation,
-        "wind_loss": labels.wind_loss,
-        "suboptimal_traj": labels.suboptimal_traj,
-    }
-
-    # Features at t-lag
-    T, N = wind.shape
-    lag = horizon_lag
-    # drop first lag timesteps
-    idx_t = np.arange(lag, T)
-
-    # base feature matrix per (t,i)
-    # order matters for grouping later
-    feature_names = [
-        "wind_mag",
-        "gnss_error_mag",
-        "rep_force_mag",
-        "tracking_error_mag",
-        "formation_error",
-        "min_pairwise_dist",
-        "interaction_pressure",
-    ]
-
-    X = np.stack([
-        wind[idx_t],
-        gnss[idx_t],
-        repf[idx_t],
-        track[idx_t],
-        formerr[idx_t],
-        mindist[idx_t],
-        interaction_pressure[idx_t],
-    ], axis=-1)  # [T-lag, N, F]
-
-    # lagged features (t-lag)
-    X_lag = np.stack([
-        wind[idx_t - lag],
-        gnss[idx_t - lag],
-        repf[idx_t - lag],
-        track[idx_t - lag],
-        formerr[idx_t - lag],
-        mindist[idx_t - lag],
-        interaction_pressure[idx_t - lag],
-    ], axis=-1)
-
-    # Flatten
-    Xf = X_lag.reshape(-1, X_lag.shape[-1])  # [(T-lag)*N, F]
-    scaler = StandardScaler().fit(Xf)
-    Xfs = scaler.transform(Xf)
-
-    outputs_proba: Dict[str, np.ndarray] = {}
-    event_causes: List[Dict] = []
-    avg_causes: Dict[str, Dict[str, List[float]]] = {}
-
-    # Factor grouping for root-cause attribution
-    groups = {
-        "wind": ["wind_mag"],
-        "gnss": ["gnss_error_mag"],
-        "interaction": ["rep_force_mag", "min_pairwise_dist", "interaction_pressure"],
-        "formation_tracking": ["tracking_error_mag", "formation_error"],
-    }
-    name_to_idx = {n: k for k, n in enumerate(feature_names)}
-
-    for ev_name, Y in events.items():
-        y = Y[idx_t].reshape(-1).astype(int)  # [(T-lag)*N]
-        # If event extremely rare, skip
-        if y.sum() < 10:
-            print(f"[EventModel] '{ev_name}' trop rare ({y.sum()} positives). Skipping model.")
-            outputs_proba[ev_name] = np.zeros((T, N), dtype=np.float32)
-            continue
-
-        clf = LogisticRegression(max_iter=2000, class_weight="balanced", solver="lbfgs")
-        clf.fit(Xfs, y)
-
-        # Predict proba for all times (align)
-        proba_all = np.zeros((T, N), dtype=np.float32)
-        proba = clf.predict_proba(Xfs)[:, 1].reshape(len(idx_t), N)
-        proba_all[idx_t] = proba.astype(np.float32)
-        outputs_proba[ev_name] = proba_all
-
-        # Root-cause explanations for positive instances
-        coef = clf.coef_.reshape(-1)  # [F]
-        # Build contributions per instance in standardized space
-        # contribution = coef_k * x_k
-        contrib = Xfs * coef[None, :]  # [M,F]
-        contrib = np.maximum(contrib, 0.0)  # only positive evidence
-
-        pos_indices = np.where(y == 1)[0]
-        if len(pos_indices) > max_events_to_explain:
-            pos_indices = rng.choice(pos_indices, size=max_events_to_explain, replace=False)
-
-        # Aggregate average cause by drone
-        avg_causes[ev_name] = {g: [0.0] * N for g in groups.keys()}
-        cnt_by_drone = np.zeros(N, dtype=int)
-
-        for idx_flat in pos_indices:
-            t_rel = idx_flat // N
-            i = idx_flat % N
-            t = int(idx_t[t_rel])  # absolute time index
-
-            # group scores
-            g_scores = {}
-            for g, names in groups.items():
-                s = 0.0
-                for nm in names:
-                    s += float(contrib[idx_flat, name_to_idx[nm]])
-                g_scores[g] = s
-
-            # softmax to probabilities
-            vec = np.array(list(g_scores.values()), dtype=np.float32)
-            probs = softmax_np(vec, axis=0)
-            g_probs = {g: float(probs[k]) for k, g in enumerate(g_scores.keys())}
-
-            # store
-            event_causes.append({
-                "event": ev_name,
-                "time": float(logs.times[t]),
-                "t_index": int(t),
-                "drone": int(i),
-                "drone_name": logs.drone_names[i],
-                "predicted_event_probability": float(proba_all[t, i]),
-                "cause_probabilities": g_probs,
-                "raw_group_scores": g_scores,
-            })
-
-            # accumulate averages
-            cnt_by_drone[i] += 1
-            for g in groups.keys():
-                avg_causes[ev_name][g][i] += g_probs[g]
-
-        for i in range(N):
-            if cnt_by_drone[i] > 0:
-                for g in groups.keys():
-                    avg_causes[ev_name][g][i] /= float(cnt_by_drone[i])
-
-        print(f"[EventModel] '{ev_name}': trained. Explained events: {len(pos_indices)}.")
-
-    return EventModelOutputs(proba=outputs_proba, event_causes=event_causes, avg_causes=avg_causes)
-
-
-# ---------------------------
-# Systemic impact across the network
-# ---------------------------
-
-def compute_systemic_impact(events: np.ndarray, target_errors: np.ndarray, horizon_steps: int = 10) -> np.ndarray:
-    """
-    events: [T,N] binary (source events)
-    target_errors: [T,N] binary (target "impact" indicator, can reuse same event type or a generic failure)
-    Returns impact matrix [N,N]:
-      impact[i->j] = P(target_error_j within horizon | event_i at t) - P(target_error_j)
-    """
-    T, N = events.shape
-    base = np.mean(target_errors, axis=0)  # [N]
-
-    impact = np.zeros((N, N), dtype=np.float32)
-    for i in range(N):
-        t_events = np.where(events[:, i] == 1)[0]
-        if len(t_events) == 0:
-            continue
-        for j in range(N):
-            hit = 0
-            total = 0
-            for t in t_events:
-                t2 = min(T, t + horizon_steps + 1)
-                total += 1
-                if np.any(target_errors[t:t2, j] == 1):
-                    hit += 1
-            cond = hit / max(total, 1)
-            impact[i, j] = float(cond - base[j])
-    return impact
-
-
-# ---------------------------
-# Plotting helpers
-# ---------------------------
-
-def plot_heatmap(mat: np.ndarray, title: str, xlabel: str, ylabel: str,
-                 xticks: List[str], yticks: List[str], out_path: str,
-                 vmin: Optional[float] = None, vmax: Optional[float] = None) -> None:
-    plt.figure(figsize=(8, 6))
-    plt.imshow(mat, aspect="auto", vmin=vmin, vmax=vmax)
-    plt.colorbar()
-    plt.title(title)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.xticks(np.arange(len(xticks)), xticks, rotation=45, ha="right")
-    plt.yticks(np.arange(len(yticks)), yticks)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-
-
-def plot_nri_graph(edge_probs: np.ndarray, names: List[str], out_path: str, thresh: float = 0.3) -> None:
-    N = len(names)
-    G = nx.DiGraph()
-    for i in range(N):
-        G.add_node(names[i])
-    for i in range(N):
-        for j in range(N):
-            if i == j:
-                continue
-            w = float(edge_probs[i, j])
-            if w >= thresh:
-                G.add_edge(names[j], names[i], weight=w)  # j -> i
-
-    if G.number_of_edges() == 0:
-        # still save an empty plot
-        plt.figure(figsize=(6, 6))
-        plt.title("NRI inferred graph (no edges above threshold)")
-        nx.draw(G, with_labels=True)
-        plt.tight_layout()
-        plt.savefig(out_path, dpi=200)
-        plt.close()
-        return
-
-    pos = nx.spring_layout(G, seed=0)
-    weights = [G[u][v]["weight"] for u, v in G.edges()]
-    # draw
-    plt.figure(figsize=(7, 7))
-    plt.title("NRI inferred causal influence graph (directed)")
-    nx.draw_networkx_nodes(G, pos, node_size=900)
-    nx.draw_networkx_labels(G, pos)
-    nx.draw_networkx_edges(G, pos, arrowstyle="->", arrowsize=20, width=[2 + 4*w for w in weights], alpha=0.8)
-    # edge labels
-    e_labels = {(u, v): f"{G[u][v]['weight']:.2f}" for u, v in G.edges()}
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=e_labels, font_size=9)
-    plt.axis("off")
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-
-
-def plot_loss_curve(losses: List[float], out_path: str) -> None:
-    plt.figure(figsize=(7, 4))
-    plt.plot(losses)
-    plt.title("NRI training loss (MSE)")
-    plt.xlabel("Training step")
-    plt.ylabel("MSE")
-    plt.grid(True, linestyle=":")
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-
-
-def plot_event_probas(times: np.ndarray, probas: Dict[str, np.ndarray], names: List[str], out_dir: str, max_events: int = 5) -> None:
-    """
-    Save one figure per drone with event probabilities time-series.
-    """
-    events = list(probas.keys())[:max_events]
-    T, N = next(iter(probas.values())).shape
-    for i in range(N):
-        plt.figure(figsize=(10, 4))
-        for ev in events:
-            plt.plot(times, probas[ev][:, i], label=ev)
-        plt.title(f"Predicted failure probabilities - {names[i]}")
-        plt.xlabel("time [s]")
-        plt.ylabel("P(event)")
-        plt.ylim(0, 1.0)
-        plt.grid(True, linestyle=":")
-        plt.legend(loc="upper right", ncol=2, fontsize=8)
-        plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, f"event_probabilities_{names[i]}.png"), dpi=200)
-        plt.close()
-
-
-def save_matrix_csv(mat: np.ndarray, row_names: List[str], col_names: List[str], out_path: str) -> None:
-    df = pd.DataFrame(mat, index=row_names, columns=col_names)
-    df.to_csv(out_path)
-
-
-# ---------------------------
-# Main pipeline
-# ---------------------------
-
-def run_pipeline(args: argparse.Namespace) -> Dict:
-    ensure_dir(args.output_dir)
-
-    logs = load_swarm_logs(args.log_dir, downsample=args.downsample)
-    names = logs.drone_names
-    N = len(names)
-    print(f"[Load] N={N} drones, T={len(logs.times)} steps, dt≈{logs.dt:.4f}s, downsample={args.downsample}")
-
-    labels = detect_failures(
-        logs,
-        leader_index=args.leader_index,
-        collision_dist=args.collision_dist,
-        formation_thresh=args.formation_thresh,
-        gnss_quantile=args.gnss_quantile,
-        wind_quantile=args.wind_quantile,
-        suboptimal_quantile=args.suboptimal_quantile,
-        min_persist_steps=args.suboptimal_persist,
-    )
-
-    # Build dataset for NRI
-    ds = build_sequence_dataset(logs, use_measured=args.use_measured)
-
-    # Train NRI (or load precomputed)
-    nri_res = train_nri(
-        dataset=ds,
-        n_nodes=N,
-        seq_len=args.seq_len,
-        n_edge_types=args.n_edge_types,
-        hidden=args.hidden,
-        dropout=args.dropout,
-        batch_size=args.batch_size,
-        nri_steps=args.nri_steps,
-        lr=args.lr,
-        tau_start=args.tau_start,
-        tau_end=args.tau_end,
-        tau_anneal_steps=args.tau_anneal_steps,
-        max_train_windows=args.max_train_windows,
-        device=args.device,
-        torch_threads=args.torch_threads,
-        seed=args.seed,
-        verbose_every=args.verbose_every,
-    )
-
-    # Event models & root-cause explanations
-    ev_out = fit_event_models(
-        logs=logs,
-        labels=labels,
-        edge_probs=nri_res.edge_probs,
-        horizon_lag=args.event_lag,
-        max_events_to_explain=args.max_events_to_explain,
-        seed=args.seed,
-    )
-
-    # Granger causality (wind/GNSS -> events)
-    gr = compute_granger(logs, labels, maxlag=args.granger_maxlag)
-
-    # Systemic impact: define a "generic failure" label as OR of events
-    generic_failure = (
-        (labels.collision | labels.formation_loss | labels.gnss_degradation | labels.wind_loss | labels.suboptimal_traj)
-    ).astype(np.int32)
-
-    impacts = {}
-    for ev_name, ev in {
-        "collision": labels.collision,
-        "formation_loss": labels.formation_loss,
-        "gnss_degradation": labels.gnss_degradation,
-        "wind_loss": labels.wind_loss,
-        "suboptimal_traj": labels.suboptimal_traj,
-    }.items():
-        impacts[ev_name] = compute_systemic_impact(ev, generic_failure, horizon_steps=args.impact_horizon)
-
-    # ------------------ save matrices ------------------
-    out = args.output_dir
-    np.save(os.path.join(out, "nri_edge_probs.npy"), nri_res.edge_probs)
-    np.save(os.path.join(out, "nri_edge_type_probs.npy"), nri_res.edge_type_probs)
-    np.save(os.path.join(out, "nri_signed_influence.npy"), nri_res.signed_influence)
-
-    save_matrix_csv(nri_res.edge_probs, row_names=names, col_names=names, out_path=os.path.join(out, "nri_edge_probs.csv"))
-    save_matrix_csv(nri_res.signed_influence, row_names=names, col_names=names, out_path=os.path.join(out, "nri_signed_influence.csv"))
-
-    # impacts per event
-    for ev_name, mat in impacts.items():
-        np.save(os.path.join(out, f"impact_{ev_name}.npy"), mat)
-        save_matrix_csv(mat, row_names=names, col_names=names, out_path=os.path.join(out, f"impact_{ev_name}.csv"))
-
-    # save event causes
-    with open(os.path.join(out, "event_root_cause_explanations.json"), "w", encoding="utf-8") as f:
-        json.dump(ev_out.event_causes, f, ensure_ascii=False, indent=2)
-
-    with open(os.path.join(out, "event_root_cause_averages.json"), "w", encoding="utf-8") as f:
-        json.dump(ev_out.avg_causes, f, ensure_ascii=False, indent=2)
-
-    # save granger
-    with open(os.path.join(out, "granger_scores.json"), "w", encoding="utf-8") as f:
-        json.dump({ev: {fac: gr.scores[ev][fac].tolist() for fac in gr.scores[ev]} for ev in gr.scores},
-                  f, ensure_ascii=False, indent=2)
-    with open(os.path.join(out, "granger_min_pvalues.json"), "w", encoding="utf-8") as f:
-        json.dump({ev: {fac: gr.min_pvalues[ev][fac].tolist() for fac in gr.min_pvalues[ev]} for ev in gr.min_pvalues},
-                  f, ensure_ascii=False, indent=2)
-
-    # ------------------ figures ------------------
-    plot_loss_curve(nri_res.nri_loss_curve, os.path.join(out, "nri_training_loss.png"))
-
-    plot_heatmap(
-        nri_res.edge_probs,
-        title="NRI inferred interaction probability (receiver i, sender j)",
-        xlabel="sender j",
-        ylabel="receiver i",
-        xticks=names,
-        yticks=names,
-        out_path=os.path.join(out, "nri_edge_probs_heatmap.png"),
-        vmin=0.0,
-        vmax=1.0,
-    )
-
-    plot_heatmap(
-        nri_res.signed_influence,
-        title="Signed influence (heuristic) = edge_prob * sign(repulsive/attractive)",
-        xlabel="sender j",
-        ylabel="receiver i",
-        xticks=names,
-        yticks=names,
-        out_path=os.path.join(out, "nri_signed_influence_heatmap.png"),
-        vmin=-1.0,
-        vmax=1.0,
-    )
-
-    plot_nri_graph(nri_res.edge_probs, names, os.path.join(out, "nri_inferred_graph.png"), thresh=args.graph_thresh)
-
-    # edge type heatmaps
-    for k in range(args.n_edge_types):
-        plot_heatmap(
-            nri_res.edge_type_probs[k],
-            title=f"NRI edge type probability k={k} (receiver i, sender j)",
-            xlabel="sender j",
-            ylabel="receiver i",
-            xticks=names,
-            yticks=names,
-            out_path=os.path.join(out, f"nri_edge_type_{k}_heatmap.png"),
-            vmin=0.0,
-            vmax=1.0,
-        )
-
-    # granger scores: factors (wind/gnss) x drones per event
-    for ev_name in gr.scores.keys():
-        # make a matrix 2 x N for each event
-        mat = np.stack([gr.scores[ev_name]["wind_mag"], gr.scores[ev_name]["gnss_error_mag"]], axis=0)
-        plot_heatmap(
-            mat,
-            title=f"Granger evidence (1 - min p-value): factors -> {ev_name}",
-            xlabel="drone",
-            ylabel="factor",
-            xticks=names,
-            yticks=["wind_mag", "gnss_error_mag"],
-            out_path=os.path.join(out, f"granger_{ev_name}_heatmap.png"),
-            vmin=0.0,
-            vmax=1.0,
-        )
-
-    # average root cause probabilities per event type: groups x drones
-    for ev_name, gdict in ev_out.avg_causes.items():
-        groups = list(gdict.keys())
-        mat = np.stack([np.array(gdict[g], dtype=np.float32) for g in groups], axis=0)
-        plot_heatmap(
-            mat,
-            title=f"Average root-cause probabilities per drone (event={ev_name})",
-            xlabel="drone",
-            ylabel="cause group",
-            xticks=names,
-            yticks=groups,
-            out_path=os.path.join(out, f"avg_root_cause_{ev_name}.png"),
-            vmin=0.0,
-            vmax=1.0,
-        )
-
-    # event probability series
-    plot_event_probas(logs.times, ev_out.proba, names, out)
-
-    # impacts
-    for ev_name, mat in impacts.items():
-        plot_heatmap(
-            mat,
-            title=f"Systemic impact: {ev_name} (i triggers) -> generic failure (j affected)",
-            xlabel="affected drone j",
-            ylabel="trigger drone i",
-            xticks=names,
-            yticks=names,
-            out_path=os.path.join(out, f"impact_{ev_name}_heatmap.png"),
-            vmin=float(np.min(mat)),
-            vmax=float(np.max(mat)),
-        )
-
-    # High-level summary for report
-    summary = {
-        "log_dir": args.log_dir,
-        "output_dir": args.output_dir,
-        "n_drones": N,
-        "n_steps": int(len(logs.times)),
-        "dt": logs.dt,
-        "nri": {
-            "seq_len": args.seq_len,
-            "n_edge_types": args.n_edge_types,
-            "hidden": args.hidden,
-            "nri_steps": args.nri_steps,
-            "final_train_mse": float(np.mean(nri_res.nri_loss_curve[-50:])) if len(nri_res.nri_loss_curve) >= 50 else float(np.mean(nri_res.nri_loss_curve)),
-        },
-        "detection": {
-            "collision_dist": args.collision_dist,
-            "formation_thresh": args.formation_thresh,
-            "gnss_quantile": args.gnss_quantile,
-            "wind_quantile": args.wind_quantile,
-            "suboptimal_quantile": args.suboptimal_quantile,
-        },
-        "top_edges": top_edges_from_matrix(nri_res.edge_probs, names, k=10),
-    }
-
-    with open(os.path.join(out, "summary_report.json"), "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2)
-
-    print(f"[Done] Outputs saved to: {os.path.abspath(out)}")
-    return summary
-
-
-def top_edges_from_matrix(mat: np.ndarray, names: List[str], k: int = 10) -> List[Dict]:
-    N = len(names)
-    edges = []
-    for i in range(N):
-        for j in range(N):
-            if i == j:
-                continue
-            edges.append((float(mat[i, j]), j, i))  # w, sender, receiver
-    edges.sort(reverse=True, key=lambda x: x[0])
     out = []
-    for w, j, i in edges[:k]:
-        out.append({"sender": names[j], "receiver": names[i], "weight": w})
+    for r in runs:
+        step = max(1, int(round(nri_dt / r.dt)))
+        keep = r.times >= settle_s
+        p = r.data["pos"][keep][::step]
+        v = r.data["vel"][keep][::step]
+        psi = r.data["yaw"][keep][::step]
+        x = np.concatenate(
+            [p - p.reshape(-1, 3).mean(0), v, np.cos(psi)[..., None], np.sin(psi)[..., None]], axis=-1
+        )
+        u = np.concatenate(
+            [r.data["wind"][keep][::step], r.data["gnss_err"][keep][::step][..., None]], axis=-1
+        )
+        out.append((x.astype(np.float32), u.astype(np.float32)))
     return out
 
 
+def _windows(series, L, n, rng):
+    """Fenetres de L+1 pas, jamais a cheval sur deux vols."""
+    lens = np.array([s.shape[0] - L - 1 for s, _ in series])
+    ok = np.where(lens > 0)[0]
+    if len(ok) == 0:
+        raise ValueError("vols trop courts pour la fenetre NRI")
+    w = lens[ok] / lens[ok].sum()
+    S, U = [], []
+    for r in rng.choice(ok, size=n, p=w):
+        t0 = rng.randint(0, lens[r])
+        S.append(series[r][0][t0 : t0 + L + 1])
+        U.append(series[r][1][t0 : t0 + L + 1])
+    return np.stack(S), np.stack(U)
+
+
+def _gumbel(logits, tau, hard=False):
+    g = -torch.log(-torch.log(torch.rand_like(logits) + 1e-10) + 1e-10)
+    y = F.softmax((logits + g) / tau, dim=-1)
+    if not hard:
+        return y
+    # Straight-through : aretes discretes en avant, gradient de la version douce.
+    # Le decodeur apprend alors avec des aretes PRESENTES OU ABSENTES, ce qui
+    # rend la lecture du graphe interpretable.
+    y_hard = torch.zeros_like(y).scatter_(-1, y.argmax(-1, keepdim=True), 1.0)
+    return (y_hard - y).detach() + y
+
+
+def train_nri_once(train, test, n, a, seed):
+    set_seed(seed)
+    rng = np.random.RandomState(seed)
+    L, K = a.seq_len, a.n_edge_types
+    S_dim, U_dim = train[0][0].shape[-1], train[0][1].shape[-1]
+    x_all = np.concatenate([x.reshape(-1, S_dim) for x, _ in train])
+    u_all = np.concatenate([u.reshape(-1, U_dim) for _, u in train])
+    # Echelles ISOTROPES (un scalaire pour les positions, un pour les vitesses) :
+    # la geometrie relative entre drones est conservee.
+    sp, sv = float(x_all[:, :3].std()) or 1.0, float(x_all[:, 3:6].std()) or 1.0
+    scale = np.array([sp] * 3 + [sv] * 3 + [1.0] * (S_dim - 6), dtype=np.float32)
+    su = StandardScaler().fit(u_all)
+
+    def norm(d):
+        """Mise a l'echelle commune (statistiques des vols d'entrainement seulement)."""
+        return [
+            (
+                (x / scale).astype(np.float32),
+                su.transform(u.reshape(-1, U_dim)).reshape(u.shape).astype(np.float32),
+            )
+            for x, u in d
+        ]
+
+    train_n, test_n = norm(train), norm(test)
+
+    send, recv = edge_index(n)
+    enc = NRIEncoder(L * S_dim, a.hidden, K, a.dropout)
+    H = a.own_history
+    if L < H + 1:
+        raise ValueError("seq_len doit depasser own_history")
+    dec = NRIDecoder(U_dim, a.hidden, K, a.dropout, hist=H)
+
+    def hist(w):
+        """Vitesses propres aux H pas precedant le dernier pas de la fenetre."""
+        return torch.cat([w[:, L - 2 - h, :, 3:6] for h in range(H)], -1)
+
+    opt = torch.optim.Adam(list(enc.parameters()) + list(dec.parameters()), lr=a.lr)
+
+    prior = np.full(K, (1.0 - a.edge_prior) / max(K - 1, 1))
+    prior[0] = a.edge_prior
+    log_prior = torch.tensor(np.log(prior), dtype=torch.float32)
+
+    Sw, Uw = _windows(train_n, L, a.max_train_windows, rng)
+    Sw, Uw = torch.from_numpy(Sw), torch.from_numpy(Uw)
+    curve = []
+    for step in range(1, a.nri_steps + 1):
+        tau = a.tau_start + (a.tau_end - a.tau_start) * min(1.0, step / a.tau_anneal_steps)
+        b = torch.from_numpy(rng.randint(0, Sw.shape[0], a.batch_size))
+        s, u = Sw[b], Uw[b]
+        ctx = s[:, :L].permute(0, 2, 1, 3).reshape(s.shape[0], n, -1)
+        logits = enc(ctx, send, recv, n)
+        z = _gumbel(logits, tau, hard=a.hard_edges)
+        pred = dec(s[:, L - 1], u[:, L - 1], z, send, recv, vh=hist(s))
+        nll = F.mse_loss(pred, s[:, L, :, 3:6])  # vitesse au pas suivant
+        q = F.softmax(logits, -1)
+        kl = (q * (torch.log(q + 1e-12) - log_prior)).sum(-1).mean()
+        loss = nll + a.kl_weight * kl
+        opt.zero_grad(set_to_none=True)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(list(enc.parameters()) + list(dec.parameters()), 5.0)
+        opt.step()
+        curve.append(float(nll.item()))
+        if a.verbose_every and step % a.verbose_every == 0:
+            print(f"[NRI graine {seed}] pas {step}/{a.nri_steps}  mse={nll.item():.5f}  kl={kl.item():.4f}")
+
+    enc.eval()
+    dec.eval()
+    with torch.no_grad():
+        # Aretes : moyenne de p(type) sur des fenetres d'apprentissage
+        b = torch.from_numpy(rng.randint(0, Sw.shape[0], min(1024, Sw.shape[0])))
+        ctx = Sw[b][:, :L].permute(0, 2, 1, 3).reshape(len(b), n, -1)
+        q = F.softmax(enc(ctx, send, recv, n), -1).mean(0).numpy()  # [E, K]
+        # Prediction sur des vols NON vus, avec le graphe infere puis sans aucune arete
+        mse_g, mse_0 = float("nan"), float("nan")
+        D = np.full((n, n), np.nan)
+        if test_n:
+            St, Ut = _windows(test_n, L, 1024, np.random.RandomState(seed + 1))
+            St, Ut = torch.from_numpy(St), torch.from_numpy(Ut)
+            ctx = St[:, :L].permute(0, 2, 1, 3).reshape(St.shape[0], n, -1)
+            zq = F.softmax(enc(ctx, send, recv, n), -1)
+            if a.hard_edges:  # meme regime qu'a l'apprentissage
+                zq = torch.zeros_like(zq).scatter_(-1, zq.argmax(-1, keepdim=True), 1.0)
+            s_t, u_t, tgt, vh = St[:, L - 1], Ut[:, L - 1], St[:, L, :, 3:6], hist(St)
+            err_g = ((dec(s_t, u_t, zq, send, recv, vh=vh) - tgt) ** 2).mean(dim=(0, 2))  # [N] par noeud
+            mse_g = float(err_g.mean())
+            z0 = torch.zeros_like(zq)
+            z0[..., 0] = 1.0
+            mse_0 = float(F.mse_loss(dec(s_t, u_t, z0, send, recv, vh=vh), tgt))
+            # Importance par PERMUTATION de l'arete j -> i : on garde l'arete, mais
+            # l'etat de j est pris dans une autre fenetre tiree au hasard. Si le
+            # message portait de l'information sur j, l'erreur de prediction de i
+            # augmente ; s'il ne servait que de biais (nombre de messages recus),
+            # elle ne bouge pas. Retirer l'arete (ablation) confondait ces deux cas.
+            g = torch.Generator().manual_seed(seed + 7)
+            reps = 5
+            for e, (j, i) in enumerate(zip(send.numpy(), recv.numpy())):
+                inc = 0.0
+                for _ in range(reps):
+                    perm = torch.randperm(s_t.shape[0], generator=g)
+                    err_p = (
+                        (dec(s_t, u_t, zq, send, recv, perm_edge=e, perm_idx=perm, vh=vh) - tgt) ** 2
+                    ).mean(dim=(0, 2))
+                    inc += float(err_p[i] - err_g[i]) / max(float(err_g[i]), 1e-12)
+                D[i, j] = inc / reps
+    P = np.full((n, n), np.nan)
+    for e, (j, i) in enumerate(zip(send.numpy(), recv.numpy())):
+        P[i, j] = 1.0 - q[e, 0]
+    return P, curve, mse_g, mse_0, D
+
+
+def validate_graph(P: np.ndarray, A: np.ndarray, names: List[str]) -> Dict[str, object]:
+    mask = np.isfinite(A) & np.isfinite(P)
+    y, s = A[mask], P[mask]
+    res: Dict[str, object] = {"n_aretes_jugees": int(mask.sum()), "n_aretes_attendues": int((y == 1).sum())}
+    if 0 < y.sum() < len(y):
+        res["auroc"] = float(roc_auc_score(y, s))
+        res["min_attendues"] = float(s[y == 1].min())
+        res["max_absentes"] = float(s[y == 0].max())
+        res["separation_parfaite"] = bool(s[y == 1].min() > s[y == 0].max())
+    pairs = []
+    n = len(names)
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                pairs.append(
+                    {
+                        "emetteur": names[j],
+                        "recepteur": names[i],
+                        "p_arete": float(P[i, j]),
+                        "attendu": (None if not np.isfinite(A[i, j]) else int(A[i, j])),
+                    }
+                )
+    res["aretes"] = sorted(pairs, key=lambda d: -d["p_arete"])
+    return res
+
+
+def run_nri(runs: List[SwarmLogs], st: SwarmStructure, a: argparse.Namespace) -> NRIResults:
+    set_torch_threads(a.torch_threads)
+    n = len(runs[0].drone_names)
+    data = nri_dataset(runs, a.nri_dt, a.settle_time)
+    # Vols de test : environ 20 % (au moins 1 si au moins 2 vols)
+    n_test = max(1, len(data) // 5) if len(data) >= 2 else 0
+    test, train = data[:n_test], data[n_test:]
+    Ps, Ds, curves, hg, h0 = [], [], [], [], []
+    for k in range(a.nri_seeds):
+        P, c, mg, m0, D = train_nri_once(train, test, n, a, a.seed + k)
+        Ps.append(P)
+        Ds.append(D)
+        curves.append(c)
+        hg.append(mg)
+        h0.append(m0)
+    Ps, Ds = np.stack(Ps), np.stack(Ds)
+    with warnings.catch_warnings():  # diagonale NaN : pas d'auto-arete
+        warnings.simplefilter("ignore", RuntimeWarning)
+        P, Pstd = np.nanmean(Ps, 0), np.nanstd(Ps, 0)
+        D, Dstd = np.nanmean(Ds, 0), np.nanstd(Ds, 0)
+    heldout = {
+        "n_vols_test": n_test,
+        "mse_avec_graphe": float(np.nanmean(hg)),
+        "mse_sans_aretes": float(np.nanmean(h0)),
+    }
+    if np.isfinite(heldout["mse_sans_aretes"]) and heldout["mse_sans_aretes"] > 0:
+        heldout["gain_relatif"] = 1.0 - heldout["mse_avec_graphe"] / heldout["mse_sans_aretes"]
+    A = st.known_adjacency(n)
+    val = validate_graph(P, A, runs[0].drone_names)
+    val["structure"] = st.source
+    val["stabilite_ecart_type_moyen"] = float(np.nanmean(Pstd))
+    if np.isfinite(D).any():
+        vd = validate_graph(D, A, runs[0].drone_names)
+        val["importance_permutation"] = {k: v for k, v in vd.items() if k != "aretes"}
+    return NRIResults(P, Pstd, D, Dstd, curves, heldout, val)
+
+
+# ======================================================================
+# Influence signee (heuristique, conservee mais rendue prudente)
+# ======================================================================
+
+
+def signed_influence(runs: List[SwarmLogs], P: np.ndarray, thresh: float) -> np.ndarray:
+    """
+    Signe de l'influence j -> i : correlation entre l'acceleration de i, PRIVEE de
+    l'acceleration moyenne de l'essaim (mode commun : tout le monde suit le meme
+    plan), et la direction de j vu de i. +1 attraction, -1 repulsion, 0 si la
+    statistique n'est pas significative (|t| < 2) ou si l'arete est faible.
+    """
+    n = P.shape[0]
+    num = np.zeros((n, n))
+    cnt = np.zeros((n, n))
+    sq = np.zeros((n, n))
+    for r in runs:
+        p, v = r.data["pos"], r.data["vel"]
+        acc = np.zeros_like(v)
+        acc[1:] = np.diff(v, axis=0) / max(r.dt, 1e-6)
+        acc = acc - acc.mean(axis=1, keepdims=True)
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                rel = p[:, j] - p[:, i]
+                dist = np.linalg.norm(rel, axis=1) + 1e-6
+                x = np.sum(acc[:, i] * rel, axis=1) / dist
+                num[i, j] += x.sum()
+                sq[i, j] += (x**2).sum()
+                cnt[i, j] += len(x)
+    mean = num / np.maximum(cnt, 1)
+    sd = np.sqrt(np.maximum(sq / np.maximum(cnt, 1) - mean**2, 1e-12))
+    tstat = mean / (sd / np.sqrt(np.maximum(cnt, 1)))
+    sign = np.where(np.abs(tstat) >= 2.0, np.sign(tstat), 0.0)
+    out = np.where(P >= thresh, sign * P, 0.0)
+    np.fill_diagonal(out, 0.0)
+    return out
+
+
+# ======================================================================
+# Modeles d'evenements (regression logistique) et attribution des causes
+# ======================================================================
+
+
+def _past_mean(x: np.ndarray, w: int) -> np.ndarray:
+    """Moyenne de x sur [t-w, t-1] (strictement passe), [T, N]."""
+    c = np.cumsum(np.vstack([np.zeros((1, x.shape[1])), x]), axis=0)
+    out = np.full_like(x, np.nan, dtype=np.float64)
+    out[w:] = (c[w:-1] - c[: -w - 1]) / w
+    return out
+
+
+def build_event_table(runs, outs, facs, st, a):
+    """
+    Une ligne = (vol, instant, drone) ou l'on predit l'APPARITION d'une defaillance
+    a partir des causes moyennees sur l'horizon passe. On ne garde que les instants
+    ou la defaillance n'etait pas deja active sur cet horizon : sinon le modele
+    apprend que "la defaillance d'avant predit celle de maintenant".
+    """
+    rows = {ev: [] for ev in OUTCOMES}
+    for ri, (r, o, fx) in enumerate(zip(runs, outs, facs)):
+        w = max(1, int(round(a.horizon / r.dt)))
+        X = np.stack([_past_mean(fx[f], w) for f in FACTORS], axis=-1)  # [T, N, F]
+        for ev in OUTCOMES:
+            act = o.active[ev]
+            prev = _past_mean(act.astype(float), w)
+            ok = np.isfinite(X).all(-1) & np.isfinite(prev) & (prev == 0)
+            ok &= o.applicable[ev][None, :]
+            ok &= (r.times >= a.settle_time + a.horizon)[:, None]
+            t_idx, i_idx = np.where(ok)
+            rows[ev].append(
+                pd.DataFrame(
+                    {
+                        "run": ri,
+                        "t": t_idx,
+                        "time": r.times[t_idx],
+                        "drone": i_idx,
+                        **{f: X[t_idx, i_idx, k] for k, f in enumerate(FACTORS)},
+                        "y": act[t_idx, i_idx].astype(int),
+                    }
+                )
+            )
+    return {ev: (pd.concat(v, ignore_index=True) if v else pd.DataFrame()) for ev, v in rows.items()}
+
+
+@dataclass
+class EventResults:
+    metrics: Dict[str, Dict]  # par defaillance
+    attribution: Dict[str, Dict[str, List[float]]]  # defaillance -> cause -> [N] parts moyennes
+    instances: List[Dict]
+
+
+def fit_event_models(tables, names, a) -> EventResults:
+    metrics, attribution, instances = {}, {}, []
+    rng = np.random.RandomState(a.seed)
+    n = len(names)
+    for ev, df in tables.items():
+        feats = [f for f in FACTORS if f not in EXCLUDED_FACTORS.get(ev, set())]
+        m: Dict[str, object] = {
+            "causes_candidates": feats,
+            "n_echantillons": int(len(df)),
+            "n_apparitions": int(df["y"].sum()) if len(df) else 0,
+        }
+        metrics[ev] = m
+        if len(df) == 0 or df["y"].sum() < a.min_events or df["y"].sum() == len(df):
+            m["statut"] = "trop peu d'apparitions pour un modele"
+            continue
+        X = df[feats].to_numpy(float)
+        sc = StandardScaler().fit(X)
+        Xs = sc.transform(X)
+        y = df["y"].to_numpy(int)
+        groups = df["run"].to_numpy()
+
+        # --- Validation croisee PAR VOL : performance sur des vols non vus ---
+        uniq = np.unique(groups)
+        pred = np.full(len(y), np.nan)
+        if len(uniq) >= 2:
+            folds = np.array_split(rng.permutation(uniq), min(5, len(uniq)))
+            for fo in folds:
+                te = np.isin(groups, fo)
+                if y[~te].sum() == 0 or y[~te].sum() == (~te).sum():
+                    continue
+                clf = LogisticRegression(max_iter=2000).fit(Xs[~te], y[~te])
+                pred[te] = clf.predict_proba(Xs[te])[:, 1]
+        ok = np.isfinite(pred)
+        if ok.sum() and 0 < y[ok].sum() < ok.sum():
+            m["auroc_vols_non_vus"] = float(roc_auc_score(y[ok], pred[ok]))
+            m["brier_vols_non_vus"] = float(brier_score_loss(y[ok], pred[ok]))
+            m["brier_reference_taux_constant"] = float(
+                brier_score_loss(y[ok], np.full(ok.sum(), y[ok].mean()))
+            )
+
+        # --- Modele final + intervalles de confiance par bootstrap sur les vols ---
+        clf = LogisticRegression(max_iter=2000).fit(Xs, y)
+        coef = clf.coef_[0]
+        boots = []
+        for _ in range(a.n_boot if len(uniq) >= 2 else 0):
+            pick = rng.choice(uniq, size=len(uniq), replace=True)
+            ix = np.concatenate([np.where(groups == g)[0] for g in pick])
+            if 0 < y[ix].sum() < len(ix):
+                boots.append(LogisticRegression(max_iter=2000).fit(Xs[ix], y[ix]).coef_[0])
+        boots = np.array(boots) if boots else np.full((1, len(feats)), np.nan)
+        lo, hi = np.nanpercentile(boots, 2.5, axis=0), np.nanpercentile(boots, 97.5, axis=0)
+        m["coefficients"] = {
+            f: {
+                "odds_ratio_par_ecart_type": float(np.exp(coef[k])),
+                "ic95": [float(np.exp(lo[k])), float(np.exp(hi[k]))],
+                "significatif": bool(np.isfinite(lo[k]) and (lo[k] > 0 or hi[k] < 0)),
+            }
+            for k, f in enumerate(feats)
+        }
+
+        # --- Attribution par apparition : parts POSITIVES normalisees par leur somme ---
+        # (une softmax donnerait 25 % a chaque cause meme quand aucune n'a d'effet)
+        contrib = np.maximum(Xs * coef[None, :], 0.0)
+        tot = contrib.sum(axis=1)
+        pos = np.where(y == 1)[0]
+        acc = {f: np.zeros(n) for f in feats}
+        acc["inexpliquee"] = np.zeros(n)
+        cnt = np.zeros(n)
+        for r in pos:
+            i = int(df["drone"].iat[r])
+            cnt[i] += 1
+            if tot[r] < a.attr_min:
+                acc["inexpliquee"][i] += 1.0
+                share = {f: 0.0 for f in feats}
+                share["inexpliquee"] = 1.0
+            else:
+                share = {f: float(contrib[r, k] / tot[r]) for k, f in enumerate(feats)}
+                share["inexpliquee"] = 0.0
+                for f in feats:
+                    acc[f][i] += share[f]
+            if len(instances) < a.max_events_to_explain:
+                instances.append(
+                    {
+                        "defaillance": ev,
+                        "vol": int(df["run"].iat[r]),
+                        "temps": float(df["time"].iat[r]),
+                        "drone": names[i],
+                        "parts_des_causes": share,
+                    }
+                )
+        attribution[ev] = {f: (acc[f] / np.maximum(cnt, 1)).tolist() for f in acc}
+        attribution[ev]["_n"] = cnt.tolist()
+        m["statut"] = "ok"
+        print(
+            f"[Evenements] {ev}: {int(y.sum())} apparitions, AUROC vols non vus = "
+            f"{m.get('auroc_vols_non_vus', float('nan')):.3f}"
+        )
+    return EventResults(metrics, attribution, instances)
+
+
+# ======================================================================
+# Granger (sur des grandeurs continues, avec correction de Bonferroni)
+# ======================================================================
+
+
+def _granger_tests(z: np.ndarray, maxlag: int):
+    """grangercausalitytests, compatible avant/apres statsmodels 0.15 (argument verbose retire)."""
+    try:
+        return grangercausalitytests(z, maxlag=maxlag, verbose=False)
+    except TypeError:
+        return grangercausalitytests(z, maxlag=maxlag)
+
+
+def granger(runs, outs, facs, st, a) -> pd.DataFrame:
+    """
+    La cause candidate x aide-t-elle a predire la grandeur continue y, au-dela du
+    passe de y ? Teste par vol et par drone, a ~5 Hz, retards jusqu'a 1 s.
+    Seuil de Bonferroni sur l'ensemble des tests. Les cas degeneres (serie
+    constante, trop courte, echec numerique) sont marques, pas convertis en "0".
+    """
+    recs = []
+    n_tests = 0
+    for r, o, fx in zip(runs, outs, facs):
+        k = max(1, int(round(a.granger_dt / r.dt)))
+        t_ok = r.times >= a.settle_time
+        for ev in OUTCOMES:
+            for f in FACTORS:
+                if f in EXCLUDED_FACTORS.get(ev, set()):
+                    continue
+                for i in range(len(r.drone_names)):
+                    if not o.applicable[ev][i]:
+                        continue
+                    y = o.continuous[ev][t_ok, i][::k]
+                    x = fx[f][t_ok, i][::k]
+                    rec = {"vol": r.run_id, "defaillance": ev, "cause": f, "drone": r.drone_names[i]}
+                    n_tests += 1
+                    if len(y) < 3 * a.granger_maxlag + 10 or np.std(y) < 1e-9 or np.std(x) < 1e-9:
+                        rec["statut"] = "degenere"
+                        recs.append(rec)
+                        continue
+                    try:
+                        z = np.column_stack([(y - y.mean()) / y.std(), (x - x.mean()) / x.std()])
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            res = _granger_tests(z, a.granger_maxlag)
+                        best = min(res, key=lambda L: res[L][0]["ssr_ftest"][1])
+                        Fv, p, dfd, dfn = res[best][0]["ssr_ftest"]
+                        rec.update(
+                            statut="ok",
+                            p_min=float(p),
+                            retard=int(best),
+                            p_corrige_retards=float(min(1.0, p * a.granger_maxlag)),
+                            r2_partiel=float(Fv * dfn / (Fv * dfn + dfd)),
+                        )
+                    except Exception as exc:
+                        rec.update(statut=f"echec: {type(exc).__name__}")
+                    recs.append(rec)
+    df = pd.DataFrame(recs)
+    if len(df) and "p_corrige_retards" in df:
+        alpha = 0.05 / max(n_tests, 1)
+        df["significatif_bonferroni"] = df["p_corrige_retards"] < alpha
+        df.attrs["alpha_bonferroni"] = alpha
+    return df
+
+
+# ======================================================================
+# Impact systemique (contre une hypothese nulle)
+# ======================================================================
+
+
+def systemic_impact(runs, outs, a, rng):
+    """
+    impact[i, j] = P(nouvelle defaillance de j dans ]t, t+H] | defaillance de i
+    apparait en t) - meme probabilite sous l'hypothese nulle.
+
+    Nulle : on decale circulairement les instants d'apparition de i d'une duree
+    aleatoire (meme vol, meme nombre d'evenements, structure temporelle de j
+    intacte). Les deux probabilites portent sur la meme fenetre, sinon la
+    difference serait biaisee vers le positif.
+    """
+    n = len(runs[0].drone_names)
+    any_on = []
+    for o in outs:
+        act = np.zeros_like(o.active[OUTCOMES[0]])
+        for ev in OUTCOMES:
+            act |= o.active[ev]
+        any_on.append(onsets(act))
+    result = {}
+    for ev in OUTCOMES:
+        cond = np.zeros((n, n))
+        null = np.zeros((a.n_perm, n, n))
+        cnt = np.zeros(n)
+        for r, o, tgt in zip(runs, outs, any_on):
+            T = len(r.times)
+            H = max(1, int(round(a.impact_horizon / r.dt)))
+            src = onsets(o.active[ev])
+            csum = np.vstack([np.zeros((1, n)), np.cumsum(tgt, axis=0)])
+
+            def hit(tt, csum=csum, H=H, T=T):
+                """Pour chaque instant tt : au moins une nouvelle defaillance dans ]tt, tt + H] ?"""
+                return (csum[np.minimum(tt + H + 1, T)] - csum[np.minimum(tt + 1, T)]) > 0
+
+            for i in range(n):
+                tt = np.where(src[:, i])[0]
+                if len(tt) == 0:
+                    continue
+                cnt[i] += len(tt)
+                cond[i] += hit(tt).sum(axis=0)
+                for b in range(a.n_perm):
+                    sh = (tt + rng.randint(H, max(H + 1, T - H))) % T
+                    null[b, i] += hit(sh).sum(axis=0)
+        c = cond / np.maximum(cnt, 1)[:, None]
+        nl = null / np.maximum(cnt, 1)[None, :, None]
+        imp = c - nl.mean(0)
+        pval = (1 + (nl >= c[None]).sum(0)) / (1 + a.n_perm)
+        np.fill_diagonal(imp, np.nan)
+        np.fill_diagonal(pval, np.nan)
+        imp[cnt == 0] = np.nan
+        result[ev] = {"impact": imp, "p": pval, "n_sources": cnt}
+    return result
+
+
+# ======================================================================
+# Figures
+# ======================================================================
+
+
+def heatmap(mat, title, xl, yl, xt, yt, path, vmin=None, vmax=None, annot=None, cmap="viridis"):
+    fig, ax = plt.subplots(figsize=(1.4 * len(xt) + 3, 1.0 * len(yt) + 2.4))
+    im = ax.imshow(np.ma.masked_invalid(mat), aspect="auto", vmin=vmin, vmax=vmax, cmap=cmap)
+    fig.colorbar(im, ax=ax)
+    ax.set_xticks(range(len(xt)))
+    ax.set_xticklabels(xt, rotation=30, ha="right")
+    ax.set_yticks(range(len(yt)))
+    ax.set_yticklabels(yt)
+    ax.set_xlabel(xl)
+    ax.set_ylabel(yl)
+    ax.set_title(title, fontsize=10)
+    if annot is not None:
+        for (r, c), s in np.ndenumerate(annot):
+            if s:
+                ax.text(c, r, s, ha="center", va="center", fontsize=8, color="w")
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+
+
+def plot_nri(res: NRIResults, A: np.ndarray, names, out, imp_thresh, details=None):
+    """Graphe principal dans `out` ; cartes de chaleur et apprentissage dans `details` (si fourni)."""
+    n = len(names)
+
+    def ann(M, Ms, fmt):
+        an = np.empty((n, n), dtype=object)
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    an[i, j] = ""
+                    continue
+                exp = "" if not np.isfinite(A[i, j]) else (" ✓" if A[i, j] == 1 else " ·")
+                an[i, j] = fmt.format(M[i, j], Ms[i, j]) + exp
+        return an
+
+    v = res.validation
+    auc = v.get("auroc")
+    if details:
+        _plot_nri_details(res, names, details, ann, v, auc)
+    _plot_graph(res, A, names, out, imp_thresh)
+
+
+def _plot_nri_details(res, names, out, ann, v, auc):
+    heatmap(
+        res.edge_probs,
+        "NRI : probabilite d'arete j -> i (moyenne ± ecart-type entre graines)\n"
+        "✓ influence attendue, · aucune attendue"
+        + (f" | AUROC vs structure connue = {auc:.2f}" if auc is not None else ""),
+        "emetteur j",
+        "recepteur i",
+        names,
+        names,
+        os.path.join(out, "nri_edge_probs_heatmap.png"),
+        0,
+        1,
+        ann(res.edge_probs, res.edge_probs_std, "{:.2f}±{:.2f}"),
+    )
+    if np.isfinite(res.importance).any():
+        vi = v.get("importance_permutation", {})
+        auc_i = vi.get("auroc")
+        heatmap(
+            100 * res.importance,
+            "NRI : hausse de l'erreur de prediction de i sur des vols NON vus\n"
+            "quand l'etat de j est remplace par celui d'une autre fenetre [%]"
+            + (f" | AUROC vs structure connue = {auc_i:.2f}" if auc_i is not None else ""),
+            "emetteur j",
+            "recepteur i",
+            names,
+            names,
+            os.path.join(out, "nri_edge_importance_heatmap.png"),
+            0,
+            max(1.0, float(np.nanmax(100 * res.importance))),
+            ann(100 * res.importance, 100 * res.importance_std, "{:.0f}±{:.0f}%"),
+            cmap="magma",
+        )
+    fig, ax = plt.subplots(figsize=(7, 4))
+    for k, c in enumerate(res.loss_curves):
+        ax.plot(pd.Series(c).rolling(50, min_periods=1).mean(), lw=1, label=f"graine {k}")
+    ax.set_xlabel("pas d'apprentissage")
+    ax.set_ylabel("MSE (moyenne glissante)")
+    ax.set_title("Apprentissage NRI")
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(os.path.join(out, "nri_training_loss.png"), dpi=160)
+    plt.close(fig)
+
+
+def _swarm_layout(A, names):
+    """Leader en haut, suiveurs en dessous, drones independants a l'ecart a droite."""
+    n = len(names)
+    A0 = np.nan_to_num(A, nan=0.0)
+    leaders = [j for j in range(n) if A0[:, j].sum() > 0]
+    if len(leaders) != 1:
+        return None
+    L = leaders[0]
+    fol = [i for i in range(n) if A0[i, L] == 1]
+    ind = [i for i in range(n) if i != L and i not in fol]
+    pos = {names[L]: np.array([0.0, 1.0])}
+    xs = np.linspace(-1.0, 1.0, len(fol)) if len(fol) > 1 else [0.0]
+    for x, i in zip(xs, fol):
+        pos[names[i]] = np.array([x, -0.4])
+    for k, i in enumerate(ind):
+        pos[names[i]] = np.array([2.1, 0.3 - 0.8 * k])
+    return pos
+
+
+def _plot_graph(res, A, names, out, imp_thresh):
+    """Qui influence qui : aretes NRI retenues, colorees selon la structure connue."""
+    n = len(names)
+    W = res.importance if np.isfinite(res.importance).any() else res.edge_probs
+    G = nx.DiGraph()
+    G.add_nodes_from(names)
+    for i in range(n):
+        for j in range(n):
+            if i != j and np.isfinite(W[i, j]) and W[i, j] >= imp_thresh:
+                G.add_edge(names[j], names[i], w=float(W[i, j]))
+    fig, ax = plt.subplots(figsize=(7, 6))
+    pos = _swarm_layout(A, names) or nx.circular_layout(G)
+    A0 = np.nan_to_num(A, nan=0.0)
+    role = {}
+    for k, nm in enumerate(names):
+        role[nm] = "leader" if A0[:, k].sum() > 0 else "follower" if A0[k].sum() > 0 else "independent"
+    nx.draw_networkx_nodes(G, pos, node_size=1900, node_color="#cfe2f3", ax=ax)
+    nx.draw_networkx_labels(G, pos, {nm: f"{nm}\n({role[nm]})" for nm in names}, ax=ax, font_size=8)
+    if G.number_of_edges():
+        wmax = max(G[u][v]["w"] for u, v in G.edges())
+        idx = {nm: k for k, nm in enumerate(names)}
+        col = []
+        for u_, v_ in G.edges():  # u_ emetteur, v_ recepteur
+            exp = A[idx[v_], idx[u_]]
+            col.append("#999999" if not np.isfinite(exp) else ("#2e8b57" if exp == 1 else "#cc3333"))
+        nx.draw_networkx_edges(
+            G,
+            pos,
+            ax=ax,
+            arrowstyle="-|>",
+            arrowsize=18,
+            edge_color=col,
+            width=[1 + 5 * G[u][v]["w"] / wmax for u, v in G.edges()],
+            connectionstyle="arc3,rad=0.12",
+            node_size=1900,
+        )
+        lab = {(u, v): f"+{100 * G[u][v]['w']:.0f}%" for u, v in G.edges()}
+        try:  # networkx >= 3.2 : etiquettes sur les arcs courbes (sinon superposees)
+            nx.draw_networkx_edge_labels(G, pos, lab, font_size=8, ax=ax, connectionstyle="arc3,rad=0.12")
+        except TypeError:
+            nx.draw_networkx_edge_labels(G, pos, lab, font_size=8, ax=ax)
+    from matplotlib.lines import Line2D
+
+    ax.legend(
+        handles=[
+            Line2D([], [], color="#2e8b57", lw=3, label="real link (leader -> follower)"),
+            Line2D([], [], color="#cc3333", lw=3, label="false link (does not exist)"),
+            Line2D([], [], color="#999999", lw=3, label="follower <-> follower (avoidance)"),
+        ],
+        loc="upper center",
+        fontsize=8,
+        frameon=False,
+        ncol=3,
+        bbox_to_anchor=(0.5, 0.02),
+    )
+    ax.margins(0.15)
+    title = (
+        "Who influences whom? (graph learned by the NRI)\n"
+        f"arrow j -> i: knowing j improves the prediction of i's motion by more than "
+        f"{100 * imp_thresh:.0f} %"
+    )
+    h = res.heldout or {}
+    if (
+        h.get("mse_avec_graphe") is not None
+        and h.get("mse_sans_aretes") is not None
+        and h["mse_avec_graphe"] >= h["mse_sans_aretes"]
+    ):
+        title += "\nNOT RELIABLE: on unseen flights the graph predicts no better than a model without links"
+        ax.set_facecolor("#fff3f3")
+    ax.set_title(title, fontsize=9)
+    ax.axis("off")
+    fig.tight_layout()
+    fig.savefig(os.path.join(out, "graphe_interactions.png"), dpi=160)
+    plt.close(fig)
+
+
+CAUSE_LABELS = {
+    "wind": "wind",
+    "gnss": "GNSS error",
+    "leader_maneuver": "leader manoeuvre",
+    "interaction": "close neighbours",
+    "inexpliquee": "unexplained",
+}
+CAUSE_COLORS = {
+    "wind": "#4c9be8",
+    "gnss": "#e8833a",
+    "leader_maneuver": "#6aa84f",
+    "interaction": "#a64d79",
+    "inexpliquee": "#cccccc",
+}
+OUTCOME_LABELS = {
+    "formation_loss": "Loss of formation",
+    "nav_degradation": "Navigation degradation",
+    "near_miss": "Near miss",
+}
+
+
+def plot_causes(ev: "EventResults", names, out, title_suffix=""):
+    """
+    Une barre par drone : part de chaque cause dans ses defaillances, une
+    sous-figure par type de defaillance (seulement s'il y en a assez pour un modele).
+    """
+    evs = [e for e in OUTCOMES if e in ev.attribution]
+    if not evs:
+        fig, ax = plt.subplots(figsize=(6, 2))
+        ax.text(0.5, 0.5, "Too few failures to estimate their causes", ha="center", va="center")
+        ax.axis("off")
+        fig.savefig(os.path.join(out, "causes_defaillances.png"), dpi=130)
+        plt.close(fig)
+        return
+    fig, axes = plt.subplots(1, len(evs), figsize=(5.2 * len(evs), 3.6), squeeze=False)
+    for ax, e in zip(axes[0], evs):
+        at = ev.attribution[e]
+        nn = np.array(at["_n"])
+        keep = [i for i in range(len(names)) if nn[i] > 0]
+        left = np.zeros(len(keep))
+        for c in [c for c in at if not c.startswith("_")]:
+            vals = np.array([at[c][i] for i in keep]) * 100
+            if np.all(vals == 0):
+                continue
+            ax.barh(
+                range(len(keep)),
+                vals,
+                left=left,
+                color=CAUSE_COLORS.get(c, "#888"),
+                label=CAUSE_LABELS.get(c, c),
+            )
+            left += vals
+        ax.set_yticks(range(len(keep)), [f"{names[i]}\n({int(nn[i])} cases)" for i in keep])
+        ax.set_xlim(0, 100)
+        ax.set_xlabel("share of cases [%]")
+        ax.invert_yaxis()
+        ax.set_title(OUTCOME_LABELS.get(e, e), fontsize=10)
+        if ax.get_legend_handles_labels()[0]:
+            ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=5, frameon=False)
+    fig.suptitle("Which cause does the analysis attribute to each failure?" + title_suffix, fontsize=10)
+    fig.tight_layout()
+    fig.savefig(os.path.join(out, "causes_defaillances.png"), dpi=150)
+    plt.close(fig)
+
+
+def plot_event_models(ev: EventResults, out):
+    rows = [(e, f, c) for e, m in ev.metrics.items() for f, c in (m.get("coefficients") or {}).items()]
+    if not rows:
+        return
+    fig, ax = plt.subplots(figsize=(8, 0.45 * len(rows) + 1.5))
+    for y, (_e, _f, c) in enumerate(rows):
+        lo, hi = c["ic95"]
+        col = "#d62728" if c["significatif"] else "0.5"
+        ax.plot([lo, hi], [y, y], color=col, lw=2)
+        ax.plot(c["odds_ratio_par_ecart_type"], y, "o", color=col)
+    ax.axvline(1.0, color="k", lw=1)
+    ax.set_xscale("log")
+    ax.set_yticks(range(len(rows)))
+    ax.set_yticklabels([f"{e} <- {f}" for e, f, _ in rows], fontsize=8)
+    ax.set_xlabel("rapport de cotes pour +1 ecart-type de la cause (IC 95 %, bootstrap par vol)")
+    ax.set_title(
+        "Effet de chaque cause candidate sur l'apparition des defaillances\n"
+        "rouge : intervalle qui exclut 1 (effet significatif)",
+        fontsize=10,
+    )
+    ax.grid(alpha=0.3, axis="x")
+    fig.tight_layout()
+    fig.savefig(os.path.join(out, "event_model_odds_ratios.png"), dpi=160)
+    plt.close(fig)
+
+
+# ======================================================================
+# Pipeline
+# ======================================================================
+
+
+def _json(o):
+    if isinstance(o, (np.floating, np.integer)):
+        return o.item()
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    if isinstance(o, float) and not math.isfinite(o):
+        return None
+    raise TypeError(type(o))
+
+
+def _plot_details(a, out, names, signed, ev, gr, imp):
+    """Figures detaillees (option --all_figures), dans le sous-dossier details/."""
+    heatmap(
+        signed,
+        "Influence signee j -> i (+ attraction, - repulsion, 0 non significatif)",
+        "emetteur j",
+        "recepteur i",
+        names,
+        names,
+        os.path.join(out, "nri_signed_influence_heatmap.png"),
+        -1,
+        1,
+        cmap="coolwarm",
+    )
+    plot_event_models(ev, out)
+
+    for e, at in ev.attribution.items():
+        causes = [c for c in at if not c.startswith("_")]
+        mat = np.array([at[c] for c in causes])
+        heatmap(
+            mat,
+            f"Part moyenne de chaque cause dans les apparitions de '{e}'\n"
+            f"(nombre d'apparitions par drone : {[int(x) for x in at['_n']]})",
+            "drone",
+            "cause",
+            names,
+            causes,
+            os.path.join(out, f"avg_root_cause_{e}.png"),
+            0,
+            1,
+        )
+    if len(gr) and "significatif_bonferroni" in gr:
+        ok = gr[gr.statut == "ok"]
+        for e in OUTCOMES:
+            sub = ok[ok.defaillance == e]
+            if sub.empty:
+                continue
+            piv = (
+                sub.groupby(["cause", "drone"])["significatif_bonferroni"]
+                .mean()
+                .unstack()
+                .reindex(columns=names)
+            )
+            heatmap(
+                piv.to_numpy(float),
+                f"Granger : part des vols ou la cause predit '{e}'\n"
+                f"(seuil de Bonferroni alpha = {gr.attrs.get('alpha_bonferroni', float('nan')):.1e})",
+                "drone",
+                "cause",
+                names,
+                list(piv.index),
+                os.path.join(out, f"granger_{e}_heatmap.png"),
+                0,
+                1,
+            )
+    for e, d in imp.items():
+        star = np.where(np.nan_to_num(d["p"], nan=1) < 0.05, "*", "")
+        lim = np.nanmax(np.abs(d["impact"])) if np.isfinite(d["impact"]).any() else 1.0
+        heatmap(
+            d["impact"],
+            f"Impact : '{e}' sur le drone i -> nouvelle defaillance de j sous "
+            f"{a.impact_horizon:g} s\n(ecart a l'hypothese nulle, * p < 0.05)",
+            "drone affecte j",
+            "drone declencheur i",
+            names,
+            names,
+            os.path.join(out, f"impact_{e}_heatmap.png"),
+            -lim,
+            lim,
+            star,
+            cmap="coolwarm",
+        )
+
+
+def run_pipeline(a: argparse.Namespace) -> Dict:
+    ensure_dir(a.output_dir)
+    runs = load_runs(a.log_dir, a.downsample)
+    names = runs[0].drone_names
+    n = len(names)
+    st = swarm_structure(a.config, names, a.leader_index)
+    notes = sorted({x for r in runs for x in r.notes})
+    print(f"[Chargement] {len(runs)} vol(s), {n} drones, dt={runs[0].dt:.3f} s ; structure : {st.source}")
+    for x in notes:
+        print(f"  ! {x}")
+
+    outs = [compute_outcomes(r, st, a) for r in runs]
+
+    nri = run_nri(runs, st, a)
+    print(
+        f"[NRI] AUROC vs structure connue = {nri.validation.get('auroc')} (probabilites), "
+        f"{nri.validation.get('importance_permutation', {}).get('auroc')} (importance par permutation), "
+        f"MSE vols non vus avec/sans graphe = {nri.heldout['mse_avec_graphe']:.4f} / "
+        f"{nri.heldout['mse_sans_aretes']:.4f}"
+    )
+    # Aretes retenues : importance par permutation (les probabilites de l'encodeur
+    # sont comprimees par l'a priori parcimonieux : un seuil absolu n'y a pas de sens).
+    W = nri.importance if np.isfinite(nri.importance).any() else nri.edge_probs
+    signed = signed_influence(runs, W, a.importance_thresh if W is nri.importance else a.graph_thresh)
+
+    facs = [compute_factors(r, st, np.nan_to_num(nri.edge_probs)) for r in runs]
+    tables = build_event_table(runs, outs, facs, st, a)
+    ev = fit_event_models(tables, names, a)
+    gr = granger(runs, outs, facs, st, a)
+    imp = systemic_impact(runs, outs, a, np.random.RandomState(a.seed))
+
+    # ------------------------- sorties -------------------------
+    out = a.output_dir
+    dat = os.path.join(out, "donnees")  # chiffres bruts (csv / json)
+    ensure_dir(dat)
+    pd.DataFrame(nri.edge_probs, index=names, columns=names).to_csv(os.path.join(dat, "nri_edge_probs.csv"))
+    pd.DataFrame(nri.edge_probs_std, index=names, columns=names).to_csv(
+        os.path.join(dat, "nri_edge_probs_std.csv")
+    )
+    pd.DataFrame(nri.importance, index=names, columns=names).to_csv(
+        os.path.join(dat, "nri_edge_importance.csv")
+    )
+    pd.DataFrame(signed, index=names, columns=names).to_csv(os.path.join(dat, "nri_signed_influence.csv"))
+    json.dump(
+        {"validation": nri.validation, "prediction_vols_non_vus": nri.heldout},
+        open(os.path.join(dat, "nri_validation.json"), "w"),
+        indent=2,
+        ensure_ascii=False,
+        default=_json,
+    )
+    json.dump(
+        ev.metrics,
+        open(os.path.join(dat, "event_models.json"), "w"),
+        indent=2,
+        ensure_ascii=False,
+        default=_json,
+    )
+    json.dump(
+        ev.attribution,
+        open(os.path.join(dat, "event_root_cause_averages.json"), "w"),
+        indent=2,
+        ensure_ascii=False,
+        default=_json,
+    )
+    json.dump(
+        ev.instances,
+        open(os.path.join(dat, "event_root_cause_explanations.json"), "w"),
+        indent=2,
+        ensure_ascii=False,
+        default=_json,
+    )
+    gr.to_csv(os.path.join(dat, "granger_tests.csv"), index=False)
+    for e, d in imp.items():
+        pd.DataFrame(d["impact"], index=names, columns=names).to_csv(os.path.join(dat, f"impact_{e}.csv"))
+        pd.DataFrame(d["p"], index=names, columns=names).to_csv(os.path.join(dat, f"impact_{e}_pvalues.csv"))
+
+    # ------------------------- figures -------------------------
+    A = st.known_adjacency(n)
+    det = os.path.join(out, "details") if a.all_figures else None
+    if det:
+        ensure_dir(det)
+    plot_nri(nri, A, names, out, a.importance_thresh, det)
+    plot_causes(ev, names, out)
+    if det:
+        _plot_details(a, det, names, signed, ev, gr, imp)
+
+    rates = {
+        e: {
+            names[i]: float(np.mean([o.active[e][:, i].mean() for o in outs]))
+            for i in range(n)
+            if outs[0].applicable[e][i]
+        }
+        for e in OUTCOMES
+    }
+    summary = {
+        "log_dir": a.log_dir if isinstance(a.log_dir, str) or len(a.log_dir) > 1 else a.log_dir[0],
+        "n_vols": len(runs),
+        "drones": names,
+        "dt": runs[0].dt,
+        "structure": {
+            "source": st.source,
+            "leader": names[st.leader] if st.leader is not None else None,
+            "suiveurs": [names[i] for i in st.followers],
+            "independants": [names[i] for i in st.independents],
+        },
+        "avertissements": notes,
+        "seuils": {
+            "formation_m": a.formation_thresh,
+            "navigation_m": a.nav_thresh,
+            "quasi_collision_m": a.near_miss_dist,
+            "stabilisation_s": a.settle_time,
+        },
+        "part_du_temps_en_defaillance": rates,
+        "nri": {
+            "validation": {k: v for k, v in nri.validation.items() if k != "aretes"},
+            "prediction_vols_non_vus": nri.heldout,
+        },
+        "modeles_evenements": {
+            e: {k: v for k, v in m.items() if k != "coefficients"} for e, m in ev.metrics.items()
+        },
+    }
+    json.dump(
+        summary,
+        open(os.path.join(out, "donnees", "summary_report.json"), "w"),
+        indent=2,
+        ensure_ascii=False,
+        default=_json,
+    )
+    print(f"[Termine] Sorties dans {os.path.abspath(out)}")
+    return summary
+
+
 def build_argparser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Causal analysis (NRI + event root cause) for UxS swarm logs.")
+    p = argparse.ArgumentParser(description="Analyse causale (NRI, logistique, Granger, impact) d'un essaim.")
+    p.add_argument(
+        "--log_dir",
+        nargs="+",
+        default=["logs"],
+        help="un vol (drone_*.csv), un repertoire de vols, ou plusieurs campagnes "
+        "(regroupees : des vols avec intervention aident a separer cause et correlation)",
+    )
+    p.add_argument("--output_dir", default="causal_out")
+    p.add_argument(
+        "--config",
+        default=None,
+        help="config.yaml pour connaitre la structure de l'essaim (defaut : celui du projet)",
+    )
+    p.add_argument("--downsample", type=int, default=1)
+    p.add_argument(
+        "--all_figures",
+        action="store_true",
+        help="ecrire aussi les figures detaillees (cartes NRI, Granger, impact...) dans details/",
+    )
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--device", default="cpu", help="conserve pour compatibilite (CPU uniquement)")
+    p.add_argument("--torch_threads", type=int, default=1)
+    p.add_argument("--leader_index", type=int, default=0, help="si aucune config n'est disponible")
 
-    p.add_argument("--log_dir", type=str, default="logs", help="Directory containing drone_*.csv logs.")
-    p.add_argument("--output_dir", type=str, default="causal_out", help="Output directory for matrices and figures.")
+    g = p.add_argument_group("defaillances (seuils physiques)")
+    g.add_argument("--formation_thresh", type=float, default=1.0, help="ecart a la place en formation [m]")
+    g.add_argument("--formation_persist", type=float, default=0.5, help="duree minimale [s]")
+    g.add_argument("--nav_thresh", type=float, default=0.3, help="erreur de navigation [m]")
+    g.add_argument("--nav_persist", type=float, default=0.25, help="duree minimale [s]")
+    g.add_argument(
+        "--near_miss_dist",
+        "--collision_dist",
+        type=float,
+        default=0.3,
+        help="distance entre drones en vol [m]",
+    )
+    g.add_argument("--settle_time", type=float, default=3.0, help="decollage ignore [s]")
 
-    # Sampling / speed
-    p.add_argument("--downsample", type=int, default=1, help="Downsample logs by keeping every k-th row.")
-    p.add_argument("--seed", type=int, default=0, help="Random seed.")
-    p.add_argument("--device", type=str, default="cpu", help="cpu or cuda (if available).")
-    p.add_argument("--torch_threads", type=int, default=1, help="Nombre de threads CPU pour PyTorch (mettre 1 pour éviter un énorme overhead sur petites tailles).")
+    g = p.add_argument_group("NRI")
+    g.add_argument("--nri_dt", type=float, default=0.2, help="pas de temps du NRI [s]")
+    g.add_argument("--seq_len", type=int, default=10, help="fenetre de l'encodeur (en pas NRI)")
+    g.add_argument("--n_edge_types", type=int, default=2, help="type 0 = pas d'arete")
+    g.add_argument(
+        "--own_history", type=int, default=2, help="vitesses propres passees donnees au decodeur (en pas NRI)"
+    )
+    g.add_argument("--edge_prior", type=float, default=0.8, help="probabilite a priori de 'pas d'arete'")
+    g.add_argument("--kl_weight", type=float, default=0.01)
+    g.add_argument(
+        "--soft_edges",
+        dest="hard_edges",
+        action="store_false",
+        help="aretes douces (par defaut : echantillonnage dur straight-through)",
+    )
+    g.add_argument("--hidden", type=int, default=64)
+    g.add_argument("--dropout", type=float, default=0.0)
+    g.add_argument("--batch_size", type=int, default=64)
+    g.add_argument("--nri_steps", type=int, default=2000)
+    g.add_argument("--nri_seeds", type=int, default=3, help="nombre d'apprentissages independants")
+    g.add_argument("--max_train_windows", type=int, default=8000)
+    g.add_argument("--lr", type=float, default=1e-3)
+    g.add_argument("--tau_start", type=float, default=1.0)
+    g.add_argument("--tau_end", type=float, default=0.5)
+    g.add_argument("--tau_anneal_steps", type=int, default=1500)
+    g.add_argument("--verbose_every", type=int, default=500)
+    g.add_argument(
+        "--graph_thresh",
+        type=float,
+        default=0.3,
+        help="probabilite d'arete minimale (seulement si l'importance est indisponible)",
+    )
+    g.add_argument(
+        "--importance_thresh",
+        type=float,
+        default=0.05,
+        help="hausse relative d'erreur minimale pour retenir une arete (graphe, influence signee)",
+    )
 
-    # Failure detection thresholds
-    p.add_argument("--leader_index", type=int, default=0, help="Leader drone index for formation reference.")
-    p.add_argument("--collision_dist", type=float, default=0.6, help="Collision distance threshold [m].")
-    p.add_argument("--formation_thresh", type=float, default=1.0, help="Formation loss threshold [m].")
-    p.add_argument("--gnss_quantile", type=float, default=0.95, help="Quantile threshold for GNSS degradation.")
-    p.add_argument("--wind_quantile", type=float, default=0.95, help="Quantile threshold for wind loss.")
-    p.add_argument("--suboptimal_quantile", type=float, default=0.95, help="Quantile for suboptimal trajectory.")
-    p.add_argument("--suboptimal_persist", type=int, default=5, help="Min consecutive steps for suboptimal label.")
-
-    # NRI training params
-    p.add_argument("--use_measured", action="store_true", help="Use measured pos (EKF) instead of ground truth for NRI.")
-    p.add_argument("--seq_len", type=int, default=30, help="Sequence length (window) for NRI.")
-    p.add_argument("--n_edge_types", type=int, default=3, help="Number of edge types (type 0 assumed no-edge).")
-    p.add_argument("--hidden", type=int, default=128, help="Hidden dimension for NRI.")
-    p.add_argument("--dropout", type=float, default=0.0, help="Dropout probability.")
-    p.add_argument("--batch_size", type=int, default=64, help="Batch size for NRI training.")
-    p.add_argument("--nri_steps", type=int, default=2000, help="Training steps for NRI.")
-    p.add_argument("--max_train_windows", type=int, default=5000, help="Max sampled windows for training pool.")
-    p.add_argument("--lr", type=float, default=3e-4, help="Learning rate for NRI.")
-    p.add_argument("--tau_start", type=float, default=1.0, help="Initial Gumbel-Softmax temperature.")
-    p.add_argument("--tau_end", type=float, default=0.5, help="Final Gumbel-Softmax temperature.")
-    p.add_argument("--tau_anneal_steps", type=int, default=1500, help="Anneal steps for tau.")
-    p.add_argument("--verbose_every", type=int, default=100, help="Print NRI training status every k steps.")
-    p.add_argument("--graph_thresh", type=float, default=0.3, help="Edge threshold for graph visualization.")
-
-    # Event models / causal explanations
-    p.add_argument("--event_lag", type=int, default=1, help="Lag (in timesteps) for event prediction features.")
-    p.add_argument("--max_events_to_explain", type=int, default=2000, help="Cap number of positive event instances to explain per event.")
-    p.add_argument("--granger_maxlag", type=int, default=5, help="Max lag for Granger tests.")
-    p.add_argument("--impact_horizon", type=int, default=10, help="Horizon steps for systemic impact estimation.")
-
+    g = p.add_argument_group("evenements, Granger, impact")
+    g.add_argument("--horizon", type=float, default=1.0, help="horizon passe des causes [s]")
+    g.add_argument("--min_events", type=int, default=10)
+    g.add_argument("--n_boot", type=int, default=200)
+    g.add_argument("--attr_min", type=float, default=0.05, help="evidence minimale pour attribuer une cause")
+    g.add_argument("--max_events_to_explain", type=int, default=2000)
+    g.add_argument("--granger_dt", type=float, default=0.2)
+    g.add_argument("--granger_maxlag", type=int, default=5)
+    g.add_argument("--impact_horizon", type=float, default=2.0, help="[s]")
+    g.add_argument("--n_perm", type=int, default=200)
     return p
 
 
 def main():
-    args = build_argparser().parse_args()
-    run_pipeline(args)
+    a = build_argparser().parse_args()
+    if a.config is None:
+        guess = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.yaml")
+        a.config = guess if os.path.exists(guess) else None
+    run_pipeline(a)
 
 
 if __name__ == "__main__":

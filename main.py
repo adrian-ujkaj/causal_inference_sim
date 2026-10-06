@@ -1,33 +1,45 @@
-# main.py
+"""
+Lance une simulation decrite par un fichier de configuration YAML.
+
+    python main.py                  # config.yaml du depot
+    python main.py ma_config.yaml   # autre scenario
+"""
+
+import argparse
+import os
+import time
+
+import pybullet as p
+
 from simulator.simulator_manager import SimulationManager
 from utilities.config import load_config
-import pybullet as p
-import time
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 def main():
-    # Charge la config
-    config = load_config("config.yaml")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "config",
+        nargs="?",
+        default=os.path.join(ROOT, "config.yaml"),
+        help="fichier de configuration YAML (defaut : config.yaml du depot)",
+    )
+    args = parser.parse_args()
 
-    # Par sécurité, on vérifie quand même que c’est bien un dict
-    if config is None:
-        raise RuntimeError(
-            "La configuration n'a pas été chargée (config=None). "
-            "Vérifie le fichier config.yaml."
-        )
-
+    config_path = os.path.abspath(args.config)
+    os.chdir(ROOT)  # les chemins du YAML (assets/..., logs/...) sont relatifs au depot
+    config = load_config(config_path)
     sim = SimulationManager(config)
-
     try:
         sim.run()
-
-        # garder la fenêtre GUI ouverte quand la simu est terminée
-        mode = str(config["simulation"]["connect_mode"]).lower()
-        if mode == "gui":
-            print("Simulation terminée. Ferme la fenêtre PyBullet pour quitter.")
+        # En mode GUI, la fenetre reste ouverte a la fin de la simulation.
+        if str(config["simulation"]["connect_mode"]).lower() == "gui":
+            print("Simulation terminee. Ferme la fenetre PyBullet pour quitter.")
             while p.isConnected():
                 time.sleep(0.1)
-
     finally:
         sim.stop()
 

@@ -1,6 +1,0 @@
-{
-    "python.analysis.extraPaths": [
-        "./gym-pybullet-drones"
-    ],
-    "python-envs.defaultEnvManager": "ms-python.python:system"
-}

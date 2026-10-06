@@ -5,7 +5,7 @@ REM  puis lance la simulation.
 REM  - Miniforge (conda) si absent  -> pybullet n'a pas de version
 REM    precompilee Windows sur pip, on le prend donc sur conda-forge
 REM  - Environnement Python local dans .conda\ (dans ce dossier)
-REM  - Dependances + gym-pybullet-drones
+REM  - Dependances + gym-pybullet-drones + analyse causale et tests
 REM ==================================================================
 setlocal
 chcp 65001 >nul
@@ -42,10 +42,13 @@ if not exist "%ENV%\python.exe" (
 set "PATH=%ENV%;%ENV%\Library\bin;%ENV%\Scripts;%PATH%"
 
 REM ---------- 3. Paquets pip ----------
-echo [3/4] Installation de pathfinding et gym-pybullet-drones...
+echo [3/4] Installation de pathfinding, gym-pybullet-drones et des outils d'analyse...
 "%ENV%\python.exe" -m pip install --upgrade pathfinding
 if errorlevel 1 goto :fail
 "%ENV%\python.exe" -m pip install --no-deps https://github.com/utiasDSL/gym-pybullet-drones/archive/refs/heads/main.zip
+if errorlevel 1 goto :fail
+echo      Bibliotheques de l'analyse causale et des tests (torch, statsmodels...)
+"%ENV%\python.exe" -m pip install torch networkx statsmodels scikit-learn pytest
 if errorlevel 1 goto :fail
 
 "%ENV%\python.exe" -c "import pybullet, zmq, yaml, pathfinding, scipy, gymnasium; from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl; print('Toutes les dependances sont OK')"

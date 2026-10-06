@@ -40,6 +40,24 @@ def plot_log(path):
     data = load_log_csv(path)
     title = os.path.basename(path)
 
+    # Noms de colonnes du journal actuel (uav.py) -> noms attendus ici.
+    # Le script lisait t / x_true / x_gps / x_ekf, colonnes qui n'existent plus.
+    alias = {
+        "t": "time",
+        "x_true": "gt_x",
+        "y_true": "gt_y",
+        "z_true": "gt_z",
+        "x_gps": "meas_x",
+        "y_gps": "meas_y",
+        "z_gps": "meas_z",
+        "x_ekf": "ekf_x",
+        "y_ekf": "ekf_y",
+        "z_ekf": "ekf_z",
+    }
+    for old, new in alias.items():
+        if old not in data and new in data:
+            data[old] = data[new]
+
     t = data["t"]
 
     # Vérité terrain
@@ -81,7 +99,7 @@ def plot_log(path):
         dx = x_gps - x_true
         dy = y_gps - y_true
         dz = z_gps - z_true
-        err_norm = np.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
+        err_norm = np.sqrt(dx**2 + dy**2 + dz**2)
         err_gps[mask_gps] = err_norm[mask_gps]
 
     # Erreur EKF
@@ -91,7 +109,7 @@ def plot_log(path):
         dx = x_ekf - x_true
         dy = y_ekf - y_true
         dz = z_ekf - z_true
-        err_norm = np.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
+        err_norm = np.sqrt(dx**2 + dy**2 + dz**2)
         err_ekf[mask_ekf] = err_norm[mask_ekf]
 
     plt.figure(figsize=(8, 4))
@@ -112,7 +130,7 @@ def plot_log(path):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage : python analysis/plot_uav_log.py logs/drone_0_log.csv")
+        print("Usage : python analysis/plot_uav_log.py logs/drone_0.csv")
         sys.exit(1)
 
     log_path = sys.argv[1]
