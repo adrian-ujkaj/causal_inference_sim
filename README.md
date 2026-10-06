@@ -60,7 +60,7 @@ flowchart LR
 
 ## Who did what
 
-**Adrian Ujkaj, during the internship** (from the internship report):
+**Adrian Ujkaj, during the internship**:
 - realistic sensor models: GNSS with noise and time-windowed jamming, IMU
   measuring specific force in the body frame (`entities/sensor.py`);
 - the navigation filter (6-state EKF) and the synchronised CSV logging that feeds
