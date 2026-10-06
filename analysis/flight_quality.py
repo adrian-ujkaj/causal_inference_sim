@@ -1,9 +1,7 @@
 """
-Qualite de vol sur un ensemble de tirages. Criteres :
-  decollage : altitude max < 50 % de la cible
-  retournement : inclinaison PHYSIQUE > 90 deg a un instant (journal de verite)
-  chute : apres avoir atteint >= 80 % de la cible, finit pose au sol en contact
-  mur : contact pendant le vol (z > 0.3 m), donc avec un batiment ou un drone
+Qualite de vol sur un ensemble de tirages : decollage rate (altitude max < 50 % de la cible),
+retournement (inclinaison vraie > 90 deg), chute (au sol en contact apres >= 80 % de la cible)
+et contact en vol (z > 0.3 m, avec un batiment ou un drone).
 """
 
 import glob

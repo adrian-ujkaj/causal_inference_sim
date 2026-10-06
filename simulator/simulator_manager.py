@@ -13,35 +13,7 @@ from Control.Path_planning import HeightmapAStar
 
 
 class SimulationManager:
-    """SimulationManager
-    Orchestrates a PyBullet-based multi-agent simulation with UAVs and radar stations.
-    Responsibilities:
-        - Establish connection to PyBullet physics engine (GUI or DIRECT mode)
-        - Initialize simulation world (ground plane, obstacles, buildings)
-        - Load scenario configuration (agents, objectives, obstacles)
-        - Create and manage UAVs and RadarStation agents
-        - Instantiate swarms with leader-follower dynamics if enabled
-        - Execute main simulation loop with physics stepping and agent control
-        - Handle resource cleanup and disconnection
-    Attributes:
-        config (dict): Complete simulation configuration from config.yaml
-        dt (float): Physics simulation timestep (seconds)
-        physics_client_id (int): PyBullet client identifier
-        world (World): PyBullet world manager handling ground and obstacles
-        agents (list[UAV | RadarStation]): All active agents in the simulation
-        swarms (list[Swarm]): Swarm formations with leader-follower behavior
-        radars (list[RadarStation]): Dedicated reference to radar agents
-        planner (HeightmapAStar): Path planning algorithm using heightmap from buildings
-        obstacles_config (dict): Configuration for world obstacles and buildings
-    Methods:
-        load_scenario(): Initialize agents, obstacles, and objectives from config
-        _create_swarm_from_config(): Instantiate swarm formation if enabled
-        run(): Main simulation loop (physics stepping + agent control)
-        stop(): Cleanup and disconnect from PyBullet
-    Configuration:
-        Requires config dict with sections: simulation, physics, world, agents, objectives, swarm
-        Supports both indexed (int) and named (str) agent references in objectives
-    """
+    """Connexion PyBullet, monde, drones, radars et essaims, puis boucle de simulation."""
 
     def __init__(self, config: dict):
         self.config = config
@@ -67,9 +39,7 @@ class SimulationManager:
 
         print(f"Connecté à PyBullet, client_id={self.physics_client_id}")
 
-        # Pas d'integration physique = simulation.dt. Sans cet appel PyBullet
-        # garde 1/240 s alors que horloge, filtres et controleurs utilisent dt :
-        # tout dt different de 1/240 faussait l'echelle de temps de la physique.
+        # Pas d'integration physique = simulation.dt (PyBullet utilise 1/240 s par defaut)
         p.setTimeStep(self.dt, physicsClientId=self.physics_client_id)
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(
@@ -136,7 +106,7 @@ class SimulationManager:
         if world_type == "custom":
             world_file = self.obstacles_config.get("filename")
             p.loadURDF(
-                world_file,  # <--- Votre nouveau fichier
+                world_file,
                 basePosition=[0, 0, 0],
                 useFixedBase=1,
                 physicsClientId=self.physics_client_id,
@@ -240,7 +210,7 @@ class SimulationManager:
             sid = str(raw_swarm_configs.get("id", "default"))
             swarm_configs_map[sid] = raw_swarm_configs
 
-        # 2. Regroupement des Drones (Code existant)
+        # 2. Regroupement des drones
         swarms_groups = {}
         uavs = [a for a in self.agents if isinstance(a, UAV)]
 
@@ -262,9 +232,7 @@ class SimulationManager:
                 print(f"[Swarm] Groupe '{s_id}' : Trop petit (<2). Ignoré.")
                 continue
 
-            # --- ICI EST LA CORRECTION ---
-            # On récupère la config spécifique à cet ID (ex: "A")
-            # Si pas de config trouvée dans 'swarm:', on utilise {} (valeurs par défaut)
+            # Config de cet essaim dans 'swarm:' (valeurs par défaut sinon)
             specific_cfg = swarm_configs_map.get(s_id, {})
 
             print(f"[Swarm] Création groupe '{s_id}' avec config : {specific_cfg}")
@@ -334,8 +302,7 @@ class SimulationManager:
         if p.isConnected(self.physics_client_id):
             print("Déconnexion de PyBullet.")
             p.disconnect(self.physics_client_id)
-        # Le nettoyage de l'essaim (proxy et sockets ZMQ) se fait dans tous les
-        # cas, meme si la fenetre PyBullet a deja ete fermee.
+        # Nettoyage de l'essaim (proxy et sockets ZMQ), meme si la fenetre est fermee
         for swarm in self.swarms:
             swarm.cleanup()
         # Sockets ZMQ des drones et des radars

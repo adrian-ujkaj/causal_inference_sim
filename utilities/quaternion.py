@@ -1,18 +1,7 @@
-"""
-Outils de quaternions pour la navigation inertielle.
-
-Conventions (identiques a PyBullet, a respecter partout dans le projet) :
-  - stockage [x, y, z, w], partie scalaire EN DERNIER ;
-  - produit de Hamilton ;
-  - q represente la rotation CORPS -> MONDE : v_monde = R(q) @ v_corps ;
-  - cinematique : q_dot = 0.5 * q (x) [omega_corps, 0], donc l'increment
-    d'attitude se compose A DROITE : q(k+1) = q(k) (x) Exp(omega * dt).
-
-Attention : beaucoup de references (dont Sola, "Quaternion kinematics for the
-error-state Kalman filter") stockent [w, x, y, z]. Les formules sont les memes,
-seul l'ordre de stockage change ; c'est la source d'erreur la plus frequente
-quand on recopie une equation.
-"""
+"""Quaternions pour la navigation inertielle, avec les conventions de PyBullet :
+stockage [x, y, z, w], produit de Hamilton, q = rotation corps -> monde, increment
+d'attitude compose a droite : q(k+1) = q(k) (x) Exp(omega dt).
+Sola (2017) stocke [w, x, y, z] : memes formules, autre ordre."""
 
 from __future__ import annotations
 
@@ -133,10 +122,5 @@ def to_euler(q) -> np.ndarray:
 
 
 def attitude_error(q_est, q_true) -> np.ndarray:
-    """
-    Erreur d'attitude LOCALE (repere corps) telle que
-        q_true = q_est (x) Exp(dtheta).
-    C'est la convention de l'ESKF : la composante d'erreur angulaire du NEES
-    doit etre calculee ainsi, sinon le test de coherence est faux.
-    """
+    """Erreur d'attitude locale dtheta telle que q_true = q_est (x) Exp(dtheta) (convention ESKF)."""
     return log(mul(conj(q_est), q_true))

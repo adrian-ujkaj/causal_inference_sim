@@ -20,60 +20,9 @@ from gym_pybullet_drones.utils.enums import DroneModel
 
 
 class UAV(Agent):
-    """
-    Autonomous Unmanned Aerial Vehicle (UAV) simulator with physics, control, and swarm capabilities.
-    Integrates PyBullet physics engine with advanced control systems for realistic quadrotor simulation
-    in multi-agent environments. Features include:
-    **Physics & Control:**
-    - Precise rotor dynamics with thrust and torque coefficients
-    - DSL PID controller running at configurable frequency (default 100Hz)
-    - Aerodynamic drag modeling with airspeed compensation
-    - Quaternion-based orientation tracking
-    **Navigation & Planning:**
-    - A* path planning with asynchronous execution thread
-    - Waypoint management with dynamic replanning
-    - Repulsive force computation for obstacle avoidance
-    - Collision detection and safety radius enforcement
-    **Navigation filter (GNSS/INS):**
-    - 15-state error-state Kalman filter (ESKF) by default, 6-state filter as baseline
-    - GNSS noise, rate, outages and jamming; IMU noise and biases
-    - Optional: inner loop flown on the ESKF attitude (`filter.attitude_source`)
-    **Swarm Coordination:**
-    - Leader-follower formation control
-    - ZMQ-based state broadcasting and message handling
-    - Neighbor tracking with network delay simulation
-    - Distributed decision-making for autonomous swarms
-    **Environmental Simulation:**
-    - Dryden Gust Model for realistic turbulence generation
-    - Wind-aware flight dynamics and airspeed calculations
-    - Support for generated or custom environment layouts
-    **Logging & Analysis:**
-    - CSV-based state logging at each control cycle
-    - Causal inference metrics: ground truth vs. estimated state
-    - Tracking error, collision flags, and interaction forces
-    - Comprehensive data for post-simulation analysis
-    Attributes:
-        config (dict): Configuration dictionary with UAV parameters
-        dt (float): Physics simulation timestep (typically 1/240)
-        physics_client_id (int): PyBullet client identifier
-        name (str): UAV identifier
-        bodyId (int): PyBullet body ID
-        CTRL_FREQ (int): Control loop frequency in Hz
-        CTRL_DT (float): Control timestep (1/CTRL_FREQ)
-        mass (float): UAV mass in kg
-        ekf (ESKF | INSGNSSFilter): navigation filter (attribute name kept for compatibility)
-        gnss (GNSSensor): GNSS sensor for position/velocity measurement
-        imu (IMUSensor): IMU (specific force and angular rate)
-        planner: A* path planner instance
-        waypoints (list[np.ndarray]): List of target waypoints
-        active_path (list[np.ndarray]): Current planned path segments
-        swarm_active (bool): Whether UAV is part of active swarm
-        leader (bool): Whether UAV is swarm leader
-        other_agent_pos (dict): Positions of neighboring agents
-        message_buffer (list): Queue of delayed network messages
-        current_wind (np.ndarray): Current wind vector [m/s]
-        log_file (str): Path to CSV log file
-    """
+    """Quadrirotor simule : physique PyBullet, controleur PID (DSLPIDControl),
+    planification A*, filtre de navigation GNSS/IMU, communication avec l'essaim
+    (ZMQ) et journaux CSV pour l'analyse."""
 
     def __init__(
         self,
@@ -84,58 +33,7 @@ class UAV(Agent):
         planner,
         world_type: str,
     ):
-        """
-        Initialize a UAV entity with physics simulation, control systems, and autonomous capabilities.
-
-        Args:
-            config (dict): Configuration dictionary containing:
-            - name (str): UAV identifier. Defaults to "UAV".
-            - body_id (int): Physics body ID. Defaults to 0000.
-            - mass (float): UAV mass in kg. Defaults to 1.5.
-            - urdf_path (str): Path to URDF model file. Defaults to "assets/quadrotor.urdf".
-            - start_pos (list): Initial position [x, y, z]. Defaults to [0, 0, 1.0].
-            - start_orn_euler (list): Initial orientation in Euler angles [roll, pitch, yaw]. Defaults to [0, 0, 0].
-            - waypoints (list[list]): List of waypoint coordinates [[x, y, z], ...]. Defaults to [[0, 0, 1]].
-            - ctrl_freq (int): Control loop frequency in Hz. Defaults to 100.
-            - wind_mean (list): Mean wind vector [x, y, z] in m/s. Defaults to [0, 0, 0].
-            - turbulence (float): Dryden gust model turbulence intensity (0-20). Defaults to 15.
-            - communication (dict): Network settings with keys:
-                - com_period (float): Broadcast interval in seconds. Defaults to 0.1.
-                - com_delay_mean (float): Mean communication latency. Defaults to 0.1.
-                - com_delay_std (float): Std dev of communication latency. Defaults to 0.02.
-            - sensors (dict): Sensor configurations with keys:
-                - gnss (dict): GNSS sensor settings (frequency, delay_mean, delay_std).
-                - imu (dict): IMU sensor settings (noise parameters).
-            - physics (dict): Physics parameters:
-                - thrust_coeff (float): Thrust coefficient KF. Defaults to 6.11e-8.
-                - torque_coeff (float): Torque coefficient KM. Defaults to 1.5e-9.
-                - max_rpm (float): Maximum rotor RPM. Defaults to 22000.
-                - max_speed (float): Maximum velocity in m/s. Defaults to 5.
-                - max_repulsive_force (float): Max obstacle avoidance force in N. Defaults to 2.0.
-                - safety_radius (float): Collision avoidance radius in m. Defaults to 2.0.
-            - radar (list, optional): Radar connection configs with ip and port.
-            physics_client_id (int): PyBullet physics client identifier.
-            dt (float): Physics simulation timestep in seconds (typically 1/240).
-            known_obstacles_config (list[dict]): Configuration list for static obstacles with keys:
-            - center (list): [x, y, z] center position.
-            - height, width, length (float): Obstacle dimensions.
-            planner: A* path planner instance with planning and repulsive force computation interface.
-            world_type (str): Environment type - "generated" or "custom".
-
-        Initializes:
-            - Physics engine: Body properties, dynamics, external force/torque application.
-            - Control system: DSL PID controller running at configurable frequency (default 100Hz).
-            - Navigation: Waypoint management and A* path planning with async thread support.
-            - Navigation: GNSS/IMU filter (ESKF by default).
-            - Obstacle avoidance: Repulsive force computation and collision detection.
-            - Swarm coordination: Leader-follower formation control and neighbor tracking.
-            - Communication: ZMQ-based state broadcasting and message handling.
-            - Wind simulation: Dryden Gust Model for realistic turbulence.
-            - Logging: CSV state tracking with causal analysis metrics.
-
-        Note:
-            Physics loop runs at 240Hz; logic/control loop runs at configurable frequency (100Hz default).
-        """
+        """config : section du drone dans config.yaml ; dt : pas physique (s)."""
         self.config = config
         self.dt = float(dt)
         self.physics_client_id = physics_client_id
@@ -147,11 +45,7 @@ class UAV(Agent):
         urdf_path = config.get("urdf_path", "assets/quadrotor.urdf")
         self.start_pos = list(config.get("start_pos", [0, 0, 1.0]))
 
-        # --- GARDE-FOU 1 : altitude d'apparition ---
-        # Un drone place a z=0 apparait en intersection avec le sol : PyBullet
-        # genere des forces de contact des le premier pas, le drone peut rester
-        # epingle au sol ou partir en collision avec un voisin, et il ne decolle
-        # jamais. On remonte l'altitude d'apparition au minimum viable.
+        # Altitude d'apparition minimale : un drone pose a z = 0 reste colle au sol
         self.spawn_min_alt = float(config.get("spawn_min_alt", 0.15))
         if self.start_pos[2] < self.spawn_min_alt:
             print(
@@ -166,13 +60,7 @@ class UAV(Agent):
         self._sim_time = 0.0
         self._tick = 0
 
-        # --- FREQUENCE DE CONTROLE ---
-        # Le controle tourne tous les `ctrl_every` pas physiques. La periode
-        # effective est donc un multiple entier de dt, et c'est ELLE (pas
-        # 1/ctrl_freq) qu'il faut donner au PID et au filtre. Un test sur le
-        # temps flottant (`t - t_dernier >= 1/80` avec dt = 0.00416) echoue de
-        # justesse apres 3 pas : le controle tournerait a 60 Hz alors que le
-        # PID se croit a 80 Hz.
+        # Controle tous les ctrl_every pas physiques : CTRL_DT est un multiple de dt
         self.CTRL_FREQ = float(self.config.get("ctrl_freq", 100))
         self.ctrl_every = max(1, int(round(1.0 / (self.CTRL_FREQ * self.dt))))
         self.CTRL_DT = self.ctrl_every * self.dt
@@ -195,34 +83,23 @@ class UAV(Agent):
         self.ctrl = DSLPIDControl(drone_model=DroneModel.CF2X)
         self.last_rpms = np.zeros(4)
 
-        # Assiette maximale commandee (deg). Au-dela de 90 deg le drone est
-        # irrecuperable avec ce controleur : on garde une marge large.
+        # Inclinaison maximale commandee (deg)
         self.max_tilt_deg = float(self.config.get("max_tilt_deg", 30.0))
-        # Vol pres du sol (garde-fou 6)
+        # Vol pres du sol
         self.ground_min_alt = float(self.config.get("ground_min_alt", 0.15))
         self.ground_clear_alt = float(self.config.get("ground_clear_alt", 0.6))
         self.ground_speed_floor = float(self.config.get("ground_speed_floor", 0.1))
         self.ground_tilt_deg = float(self.config.get("ground_tilt_deg", 10.0))
         self.max_descent_speed = float(self.config.get("max_descent_speed", 1.5))
         self.max_climb_speed = float(self.config.get("max_climb_speed", 1.2))
-        # Vitesse maximale de la consigne de lacet [rad/s] (garde-fou 7)
+        # Vitesse maximale de la consigne de lacet (rad/s)
         self.max_yaw_rate = float(self.config.get("max_yaw_rate", 1.0))
         self._yaw_cmd = float(config.get("start_orn_euler", [0, 0, 0])[2])
         self.ground_descent_speed = float(self.config.get("ground_descent_speed", 0.4))
         self._ground_factor = 1.0
         # Part maximale de la demande horizontale laissee au terme integral
-        # (anti-emballement, cf. _limit_tilt_demand).
         self.integral_share = float(self.config.get("integral_share", 0.3))
-        # Demande verticale admissible, en fraction du poids. Le minimum garantit
-        # que l'axe de poussee pointe vers le haut ET que les moteurs gardent une
-        # marge pour produire du couple : en vol stationnaire un moteur CF2X tourne
-        # a 14 468 tr/min et son minimum est 9 440 tr/min, donc sous 0.43 x poids
-        # de poussee collective tous les moteurs sont en butee basse et le
-        # controle d'attitude disparait. Le maximum reste sous la poussee
-        # disponible du CF2X (environ 2.25 fois le poids) AVEC une marge pour les
-        # couples : a 30 deg la poussee totale vaut 1.6 / cos(30) = 1.85 fois le
-        # poids ; au-dela, les moteurs saturent en montee et le controleur
-        # d'attitude n'a plus de marge differentielle pour corriger.
+        # Poussee verticale admissible, en fraction du poids
         self.min_thrust_ratio = float(self.config.get("min_thrust_ratio", 0.6))
         self.max_thrust_ratio = float(self.config.get("max_thrust_ratio", 1.6))
         self._loss_of_control = False
@@ -232,14 +109,7 @@ class UAV(Agent):
         if not wp_list:
             wp_list = [[0, 0, 1]]
 
-        # --- GARDE-FOU 2 : altitude minimale des waypoints ---
-        # Un waypoint a z=0 est un piege : (a) il est sous le plancher du
-        # domaine A* (world.Astar.world_bounds.z, typiquement 0.01), donc le
-        # planificateur repond "cible inaccessible" indefiniment ; (b) le
-        # controleur commande une altitude nulle, le drone se pose, reste en
-        # contact avec le sol et n'atteint jamais le critere d'arrivee
-        # (dist < 0.5 m), car il est bloque par la friction. Resultat : blocage
-        # definitif, sans message d'erreur. On releve donc ces waypoints.
+        # Waypoints remontes a une altitude minimale (un waypoint au sol bloque A*)
         self.min_waypoint_alt = float(config.get("min_waypoint_alt", 0.30))
         clamped = 0
         wp_clean = []
@@ -260,7 +130,7 @@ class UAV(Agent):
         self.waypoints = [first_wp] + wp_clean
         self.wp_idx = 0
 
-        # Sequencement des waypoints (cf. garde-fou 5)
+        # Sequencement des waypoints
         self.wp_tol = float(config.get("wp_tolerance", 0.5))  # arrivee franche
         self.wp_capture = float(config.get("wp_capture_radius", 1.5))  # rayon de capture
         self.wp_hyst = float(config.get("wp_hysteresis", 0.3))  # marge "depasse"
@@ -276,9 +146,7 @@ class UAV(Agent):
 
         self.target_yaw_cache = 0.0
 
-        # Parametres d'evitement : lus dans `physics`, puis au niveau de l'agent.
-        # (drone_3 les declare au niveau de l'agent : ils etaient ignores et il
-        # volait avec les valeurs par defaut 2.0 m / 2.0 N.)
+        # Parametres d'evitement, dans physics ou au niveau du drone
         phys = self.config.get("physics", {}) or {}
         self.max_repulsive_force = float(
             phys.get("max_repulsive_force", self.config.get("max_repulsive_force", 2.0))
@@ -295,7 +163,7 @@ class UAV(Agent):
         self.planning_thread = None
         self.replan_timer = 0
         self.calculation_fail_count = 0
-        # Relance de A* apres echec : ~1.25 s, quelle que soit la cadence
+        # Relance de A* apres un echec (~1.25 s)
         self.replan_ticks = max(1, int(round(1.25 / self.CTRL_DT)))
         self.planning_sync = bool(self.config.get("planning_sync", False))
         self.direct_leg_xy = float(self.config.get("direct_leg_xy", 0.75))
@@ -326,11 +194,7 @@ class UAV(Agent):
         # --- SENSORS ---
         sens = self.config.get("sensors", {})
 
-        # --- FILTRE DE NAVIGATION ---
-        # filter.type : "eskf" (15 etats, defaut) ou "kf6" (position-vitesse).
-        # Les deux sont regles a partir des caracteristiques DECLAREES des
-        # capteurs (sensors.imu, sensors.gnss), pas de constantes arbitraires.
-        # (Attribut nomme `ekf` pour compatibilite avec le reste du code.)
+        # Filtre de navigation : "eskf" (15 etats, defaut) ou "kf6" (position-vitesse)
         fcfg = dict(self.config.get("filter", {}) or {})
         self.filter_type = str(fcfg.get("type", "eskf")).lower()
         start_yaw = float(config.get("start_orn_euler", [0, 0, 0])[2])
@@ -341,11 +205,7 @@ class UAV(Agent):
         )
         self.ekf.init_state(self.start_pos, np.zeros(3))
 
-        # Source de l'attitude donnee a la boucle interne du controleur :
-        #  "truth"  : attitude vraie PyBullet (defaut)
-        #  "filter" : attitude estimee par l'ESKF ; le drone vole alors
-        #             entierement sur sa propre navigation. Sans magnetometre,
-        #             le lacet n'est observable qu'en acceleration horizontale.
+        # Attitude utilisee par la boucle interne : "truth" (defaut) ou "filter" (ESKF)
         self.attitude_source = str(fcfg.get("attitude_source", "truth")).lower()
         if self.attitude_source == "filter" and self.filter_type != "eskf":
             print(
@@ -355,8 +215,7 @@ class UAV(Agent):
         self._gnss_updated = False
         self._gnss_err = float("nan")
         self.gnss = GNSSensor(sens.get("gnss", {}))
-        # dt nominal = periode de la boucle de controle : c'est a cette cadence
-        # que l'IMU est interrogee (cf. _update_control_loop).
+        # IMU lue a la cadence de controle
         self.imu = IMUSensor(sens.get("imu", {}), dt=self.CTRL_DT)
         self.last_imu_gyro = np.zeros(3)
 
@@ -367,16 +226,13 @@ class UAV(Agent):
         self.gnss_delay_std = sens.get("gnss", {}).get("delay_std", 0.01)
         self.next_gnss_trigger = 0.0
 
-        # Nominal GNSS schedule (no long-term drift) + latest raw measurement cache
+        # Echeancier GNSS et derniere mesure recue
         self.last_gnss_nominal_time = 0.0
         self.last_gnss_meas_pos = np.array(self.start_pos, dtype=np.float32)
         self.last_gnss_meas_vel = np.zeros(3, dtype=np.float32)
 
         # --- WIND ---
-        # config['wind'] = {'wind_mean': [x, y, z], 'turbulence': W20,
-        #                   'burst_start': t0, 'burst_end': t1, 'burst_turbulence': W20}
-        # (la rafale forte burst_* est optionnelle ; ancienne syntaxe
-        # config['wind_mean'], config['turbulence'] toujours acceptee)
+        # wind : wind_mean, turbulence, et en option une rafale (burst_start, burst_end, burst_turbulence)
         self.current_wind = np.zeros(3)
         wind_cfg = self.config.get("wind", {}) if isinstance(self.config.get("wind", {}), dict) else {}
         self.mean_wind = wind_cfg.get("wind_mean", self.config.get("wind_mean", [0, 0, 0]))
@@ -438,9 +294,7 @@ class UAV(Agent):
                 ]
             )
 
-        # Journal de validation du filtre, a la cadence de controle.
-        # Convention : erreur = ESTIME - VRAI. Colonnes identiques quel que soit
-        # le filtre ; celles que le KF6 n'estime pas (attitude, biais) sont vides.
+        # Journal de validation du filtre (erreur = estime - vrai)
         xyz = ("x", "y", "z")
         self.filter_log = CsvBuffer(
             os.path.join(log_dir, f"{self.name}_filter.csv"),
@@ -461,9 +315,7 @@ class UAV(Agent):
             + [f"bg_true{a}" for a in xyz]
             + ["nees", "nees_full", "nis", "gnss_update", "gnss_available", "gnss_err"],
         )
-        # Journal de verite a la cadence de controle : permet de rejouer
-        # n'importe quel filtre hors ligne sur la trajectoire reelle du vol
-        # (cf. analysis/nav_replay.py et analysis/gnss_outage.py).
+        # Trajectoire vraie, pour rejouer les filtres hors ligne
         self.truth_log = None
         if self.config.get("log_truth", True):
             self.truth_log = CsvBuffer(
@@ -487,14 +339,7 @@ class UAV(Agent):
     # Obstacle management and path planning
     # -----------------------------------------------------------------------
     def _log_filter_state(self, gt):
-        """
-        Journalise ce qu'il faut pour valider statistiquement le filtre :
-        erreurs (estime - vrai), ecarts-types issus de P, biais estimes et vrais,
-        NEES (position-vitesse, et 15 etats pour l'ESKF), NIS.
-
-        Fichier : <log_dir>/<nom>_filter.csv  (separe du log principal, pour ne
-        pas casser les scripts d'analyse existants).
-        """
+        """Erreurs, ecarts-types, biais, NEES et NIS du filtre dans <nom>_filter.csv."""
         buf = getattr(self, "filter_log", None)
         if buf is None:
             return
@@ -532,7 +377,7 @@ class UAV(Agent):
                 fmt(nis),
                 int(self._gnss_updated),
                 int(self.gnss.available),
-                # erreur GNSS a l'instant de mesure (reference honnete du gain)
+                # erreur GNSS a l'instant de mesure
                 fmt(self._gnss_err) if self._gnss_updated else "",
             ]
         )
@@ -555,37 +400,9 @@ class UAV(Agent):
                 buf.close()
 
     def _limit_tilt_demand(self, virtual_target_pos, final_target_vel, pos, vel):
-        """
-        Reduit la consigne horizontale pour que l'assiette commandee au
-        controleur reste sous `self.max_tilt_deg`.
-
-        Le controleur DSL forme sa demande d'effort comme
-            target_thrust = P * pos_e + I * integrale + D * vel_e + [0, 0, m*g]
-        et en deduit son axe de poussee. L'inclinaison commandee vaut donc
-            theta = atan(|target_thrust_xy| / (m*g)).
-        On impose |target_thrust_xy| <= tan(max_tilt) * m*g, en reduisant d'un
-        meme facteur l'erreur de position et l'erreur de vitesse horizontales :
-        la direction de la consigne est preservee, seule son amplitude est
-        bornee. La consigne verticale n'est pas touchee.
-
-        Terme integral
-        --------------
-        Le terme integral n'est pas une marge a provisionner : c'est une partie
-        de la demande, qu'on lit directement dans l'etat du controleur. Sans
-        precaution il s'emballe, car la cible virtuelle est placee 1 m devant le
-        drone pendant toute la croisiere : l'erreur de position reste d'1 m,
-        l'integrale sature (+/-2, soit 0.1 N par axe) et continue de pousser
-        dans la direction precedente au moment d'un virage. On l'empeche donc de
-        depasser une fraction `integral_share` de la demande admissible
-        (anti-emballement), puis on borne la demande TOTALE.
-
-        On ne retire PAS la valeur maximale de l'integrale a la limite : P et D
-        seraient alors plafonnes a ~3 deg d'inclinaison et le drone, pilote par
-        la seule integrale, raterait ses virages.
-
-        Returns:
-            (virtual_target_pos, final_target_vel) corriges.
-        """
+        """Borne la consigne envoyee au PID : poussee verticale, vitesse verticale et
+        inclinaison commandee (sous max_tilt_deg). L'erreur horizontale est reduite
+        sans changer de direction, et le terme integral est limite."""
         P = np.asarray(self.ctrl.P_COEFF_FOR, dtype=float)
         D = np.asarray(self.ctrl.D_COEFF_FOR, dtype=float)
         I = np.asarray(self.ctrl.I_COEFF_FOR, dtype=float)
@@ -597,12 +414,7 @@ class UAV(Agent):
         pos_e = pos_e.copy()
         vel_e = vel_e.copy()
 
-        # --- 1. Demande VERTICALE bornee : la poussee doit toujours pointer vers le haut ---
-        # Si la composante verticale de target_thrust devient negative (freinage
-        # d'une montee rapide : D_z * (0 - 3 m/s) = -1.5 N contre un poids de
-        # 0.26 N), l'axe de poussee commande pointe vers le BAS : le controleur
-        # commande un retournement. On garde la demande verticale dans
-        # [min_thrust_ratio, max_thrust_ratio] x m*g.
+        # 1. Poussee verticale bornee : l'axe de poussee doit rester vers le haut
         cz = float(I[2] * integ[2]) if integ is not None else 0.0
         uz = float(P[2] * pos_e[2] + D[2] * vel_e[2])
         tz_min = self.min_thrust_ratio * weight
@@ -618,24 +430,16 @@ class UAV(Agent):
             vel_e[2] *= kz
         tz = float(P[2] * pos_e[2] + D[2] * vel_e[2]) + cz + weight
 
-        # --- 1b. Vitesse de descente bornee, plus severement pres du sol ---
-        # Avec tz_min = 0.3 x poids, le drone pouvait se laisser tomber a 0.7 g
-        # quand l'altitude de consigne baissait (formation qui redescend) : un
-        # suiveur est tombe de 0.5 m en 0.25 s et a touche le sol en se
-        # deplacant, puis s'est retourne. Reduire la demande ne suffit pas a
-        # freiner une chute : on IMPOSE une demande minimale en agissant sur la
-        # consigne de vitesse verticale (DSL recalcule vel_e = cible - vitesse).
+        # 1b. Vitesse verticale bornee, descente plus lente pres du sol
         gf = getattr(self, "_ground_factor", 1.0)
         v_down_max = self.ground_descent_speed + (self.max_descent_speed - self.ground_descent_speed) * gf
         tz_floor = tz_min
-        # pres du sol, poussee quasi stationnaire au minimum (pas de chute)
+        # pres du sol, pas de chute libre
         tz_floor = max(
             tz_floor, weight * (self.min_thrust_ratio + (0.9 - self.min_thrust_ratio) * (1.0 - gf))
         )
         if float(vel[2]) < -v_down_max:
             tz_floor = max(tz_floor, 1.15 * weight)  # descente trop rapide : freiner
-        # Montee bornee de meme : une montee rapide se paie au sommet par un
-        # freinage a poussee minimale, la ou le controle d'attitude est le plus faible.
         if float(vel[2]) > self.max_climb_speed and tz > weight:
             uz_cap = 0.0 - cz  # plus d'acceleration vers le haut
             if D[2] > 1e-9:
@@ -647,15 +451,12 @@ class UAV(Agent):
             tz = tz_floor
         tz = max(tz, tz_min)
 
-        # --- 2. Limite horizontale, relative a la demande verticale REELLE ---
-        # L'inclinaison vaut atan(|horizontal| / vertical) : a demande verticale
-        # reduite, la meme demande horizontale incline davantage.
-        # Inclinaison admissible reduite pres du sol (garde-fou 6)
+        # 2. Inclinaison admissible, plus faible pres du sol
         gf = getattr(self, "_ground_factor", 1.0)
         tilt_deg = self.ground_tilt_deg + (self.max_tilt_deg - self.ground_tilt_deg) * gf
         limit = float(np.tan(np.radians(tilt_deg)) * tz)
 
-        # --- 3. Anti-emballement de l'integrale horizontale du controleur ---
+        # 3. Limite du terme integral horizontal
         c = np.zeros(2)
         if integ is not None:
             c = I[:2] * integ[:2]
@@ -667,7 +468,7 @@ class UAV(Agent):
 
         u = P[:2] * pos_e[:2] + D[:2] * vel_e[:2]
 
-        # --- 4. Plus grand k dans [0, 1] tel que |k u + c| <= limit ---
+        # 4. Plus grand k dans [0, 1] tel que |k u + c| <= limit
         if float(np.linalg.norm(u + c)) > limit:
             uu, uc, cc = float(u @ u), float(u @ c), float(c @ c)
             if uu < 1e-18:
@@ -684,38 +485,13 @@ class UAV(Agent):
         return virtual_target_pos, final_target_vel
 
     def _trigger_planning(self, start_pos, target_pos):
-        """
-        Initiates an asynchronous path planning thread using the A* algorithm.
-
-        Creates and starts a daemon thread that runs the async planning routine if one is not already
-        in progress. This method prevents concurrent planning operations by checking the `is_planning` flag.
-
-        Args:
-            start_pos: The starting position for path planning (coordinates or position object).
-            target_pos: The target/goal position for path planning (coordinates or position object).
-
-        Returns:
-            None
-
-        Side Effects:
-            - Sets `self.is_planning` to True when a new planning thread is started.
-            - Creates and starts a daemon thread stored in `self.planning_thread`.
-            - Prints a status message indicating planning has started.
-
-        Notes:
-            - This method is designed to be non-blocking; actual planning happens in a separate thread.
-            - The planning thread is set as a daemon, so it won't prevent program termination.
-            - Subsequent calls while `is_planning` is True will be ignored.
-        """
+        """Lance le calcul A* dans un thread (ou directement si planning_sync)."""
         if self.is_planning:
             return
         start_pos = np.asarray(start_pos, dtype=float)
         target_pos = np.asarray(target_pos, dtype=float)
 
-        # Trajet purement vertical (decollage, montee sur place) : A* travaille
-        # sur une grille 2D, depart et arrivee tombent dans la meme cellule et il
-        # renvoie None. Ce n'etait pas un echec mais c'etait compte comme tel :
-        # apres 6 "echecs" (7.5 s), le waypoint etait saute en pleine montee.
+        # Trajet vertical : rien a calculer pour A* (grille 2D)
         if float(np.linalg.norm(target_pos[:2] - start_pos[:2])) < self.direct_leg_xy:
             self.active_path = [target_pos.copy()]
             self._plan_wp_idx = self.wp_idx
@@ -725,27 +501,19 @@ class UAV(Agent):
         self._planning_for_wp = self.wp_idx
         self.is_planning = True
         if self.planning_sync:
-            # Mode deterministe (Monte-Carlo) : a graine egale, vol identique.
-            # En mode fil d'execution, le moment ou le plan arrive depend du
-            # temps de calcul reel, donc de la charge de la machine.
+            # Mode deterministe pour les campagnes Monte-Carlo
             self._run_async_plan(start_pos, target_pos)
             return
-        print(f"[{self.name}] ⏳ Starting A* Thread...")
+        print(f"[{self.name}] Starting A* thread...")
         self.planning_thread = threading.Thread(target=self._run_async_plan, args=(start_pos, target_pos))
         self.planning_thread.daemon = True
         self.planning_thread.start()
 
     def _run_async_plan(self, start_pos, target_pos):
-        """
-        Execute asynchronous path planning from start to target position.
-        Attempts to compute a path using the planner. Updates active_path if successful,
-        otherwise increments failure counter. Sets is_planning flag to False upon completion.
-        :param start_pos: Starting position coordinates
-        :param target_pos: Target position coordinates
-        """
+        """Calcule le chemin A* et met a jour active_path."""
         try:
             path = self.planner.plan(start_pos, target_pos)
-            # Un plan calcule pour un waypoint deja depasse est jete.
+            # Plan ignore si le waypoint a change pendant le calcul
             if path and len(path) > 0 and self._planning_for_wp == self.wp_idx:
                 self.active_path = [np.asarray(w, dtype=float) for w in path]
                 self._plan_wp_idx = self.wp_idx
@@ -753,29 +521,14 @@ class UAV(Agent):
             elif not path:
                 self.calculation_fail_count += 1
         except Exception as e:
-            # Une exception est un echec : elle doit compter, sinon un
-            # planificateur defaillant est relance indefiniment.
+            # Une exception compte comme un echec
             self.calculation_fail_count += 1
-            print(f"[{self.name}] 💥 Error in A* thread: {e}")
+            print(f"[{self.name}] Error in A* thread: {e}")
         finally:
             self.is_planning = False
 
     def _compute_repulsive_force(self, current_pos):
-        """
-        Compute repulsive force from obstacles and other agents.
-
-        Combines repulsive forces from:
-        - Other UAVs: Inverse-distance force within safety radius
-        - Static obstacles: AABB-based collision avoidance using spatial indexing
-
-        Returns normalized force vector capped at max_repulsive_force magnitude.
-
-        Args:
-            current_pos (np.ndarray): Current 3D position [x, y, z]
-
-        Returns:
-            np.ndarray: Repulsive force vector [fx, fy, fz] in Newtons
-        """
+        """Repulsion des autres drones et des batiments proches, bornee a max_repulsive_force."""
         force_vec = np.array([0.0, 0.0, 0.0])
         min_dist = np.inf
 
@@ -852,8 +605,7 @@ class UAV(Agent):
     # -----------------------------------------------------------------------
     def setup_network_swarm(self, ip, port_pub_swarm, port_sub_swarm):
 
-        # Defensive close if re-running multiple simulations in the same process
-        # (e.g., ablation suite). On Windows, stale sockets can keep ports busy.
+        # Ferme d'anciens sockets (plusieurs simulations dans le meme processus)
         for attr in ("sub_socket", "pub_socket"):
             sock = getattr(self, attr, None)
             if sock is not None:
@@ -862,9 +614,7 @@ class UAV(Agent):
                 except Exception:
                     pass
 
-        # IMPORTANT: In this architecture, the Swarm proxy thread binds the ports
-        # (XSUB/XPUB). UAVs must CONNECT (not bind), otherwise you'll hit
-        # EACCES/"Permission denied" on Windows when ports are already in use.
+        # Le proxy de l'essaim fait le bind, les drones se connectent seulement
         self.sub_socket = self.zmq_ctx.socket(zmq.SUB)
         self.sub_socket.connect(f"tcp://{ip}:{port_sub_swarm}")
         self.sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
@@ -879,20 +629,7 @@ class UAV(Agent):
         self.pub_socket.setsockopt(zmq.LINGER, 0)
 
     def radar_com_setup(self, radars_list):
-        """
-        Setup ZMQ socket for radar communication.
-
-        Connects to one or more radar sources specified in the configuration.
-        Creates a SUB socket with non-blocking mode and optional conflation.
-
-        Args:
-            radars_list (list[dict]): List of radar configurations, each with:
-            - ip (str): Radar server IP address
-            - port (int): Radar server port number
-
-        Returns:
-            None
-        """
+        """Abonnement ZMQ aux radars de la configuration."""
         self.radar_sub_socket = self.zmq_ctx.socket(zmq.SUB)
         self.radar_sub_socket.setsockopt_string(zmq.SUBSCRIBE, "")
         self.radar_sub_socket.setsockopt(zmq.RCVTIMEO, 1)
@@ -912,14 +649,10 @@ class UAV(Agent):
                 print(f"[{self.name}] Connecting to radar defined in config: {address}")
                 self.radar_sub_socket.connect(address)
             else:
-                print(f"[{self.name}] ⚠️ Error: Radar port not specified in config.")
+                print(f"[{self.name}] Error: radar port not specified in config.")
 
     def broadcast_state(self, pos, vel):
-        """
-        Broadcast current UAV state to swarm network.
-        Sends position, velocity, yaw, and simulation time as JSON via ZMQ pub socket.
-        Rounds values to 3 decimal places for network efficiency.
-        """
+        """Diffuse l'etat du drone a l'essaim (JSON via ZMQ)."""
         if getattr(self, "pub_socket", None) is None:
             return
         pos = [round(p, 3) for p in pos]
@@ -934,12 +667,7 @@ class UAV(Agent):
         self.pub_socket.send_string("State " + json.dumps(msg))
 
     def listen_radar(self):
-        """
-        Process incoming radar messages with simulated perception delay.
-        Buffers messages with random delay to simulate network latency, then processes them
-        when their target time is reached. Extracts detected agent positions and updates
-        neighbor tracking for collision avoidance and swarm coordination.
-        """
+        """Lit les messages radar, avec un retard de perception simule."""
         while True:
             try:
                 # Non-blocking read
@@ -958,7 +686,6 @@ class UAV(Agent):
 
         for target_time, msg in self.radar_message_buffer:
             if self._sim_time >= target_time:
-                # --- MESSAGE IS READY: PROCESS IT ---
                 if " " in msg:
                     _, json_str = msg.split(" ", 1)
                     try:
@@ -980,18 +707,12 @@ class UAV(Agent):
                         pass
             else:
                 buffer_remaining.append((target_time, msg))
-                # --- NOT READY YET: KEEP IT ---
 
         # Replace buffer with remaining messages
         self.radar_message_buffer = buffer_remaining
 
     def listen_swarm(self):
-        """
-        Process incoming swarm messages with simulated perception delay.
-        Buffers messages with random delay to simulate latency, then processes them
-        when their target time is reached. Handles SWARM (neighbor updates) and
-        FUTURE_POS (state predictions) message types.
-        """
+        """Lit les messages de l'essaim, avec un retard de perception simule."""
         while True:
             try:
                 # Non-blocking read
@@ -1010,7 +731,6 @@ class UAV(Agent):
 
         for target_time, msg in self.message_buffer:
             if self._sim_time >= target_time:
-                # --- MESSAGE IS READY: PROCESS IT ---
                 if " " in msg:
                     topic, json_str = msg.split(" ", 1)
                     try:
@@ -1030,7 +750,6 @@ class UAV(Agent):
                         pass
             else:
                 buffer_remaining.append((target_time, msg))
-                # --- NOT READY YET: KEEP IT ---
 
         # Replace buffer with remaining messages
         self.message_buffer = buffer_remaining
@@ -1039,26 +758,17 @@ class UAV(Agent):
     # MAIN LOOP & LOGIC
     # -----------------------------------------------------------------------
     def think_and_act(self):
-        """
-        Perform a single simulation tick: update time, wind, control logic (100Hz), physics (240Hz), and optionally log state.
-        """
+        """Un pas de simulation : vent, controle (tous les ctrl_every pas), physique, journal."""
         if not p.isConnected(self.physics_client_id):
             return
 
-        # 1. Horloge : compteur entier de pas physiques. Un temps flottant
-        # cumule (t += dt) puis compare a un seuil produit des cadences
-        # irregulieres ; le compteur garantit un controle tous les
-        # `ctrl_every` pas exactement.
+        # 1. Horloge : compteur entier de pas physiques
         self._tick += 1
         self._sim_time = self._tick * self.dt
 
-        # Vent : la vitesse air oriente la composante longitudinale des rafales
         gt = self.get_ground_truth_state()
         h = gt["pos"][2]
-        # Vitesse air par rapport au vent MOYEN (convection de la turbulence
-        # figee). Avec le vent instantane, la direction de la rafale suivrait la
-        # rafale elle-meme et tournerait au hasard a chaque pas : le vent
-        # deviendrait un bruit blanc sans effet sur le vol.
+        # Vent : rafales orientees selon la vitesse air (par rapport au vent moyen)
         v_air = np.asarray(gt["vel"], dtype=float) - self.wind_module.mean_wind
         self.current_wind = self.wind_module.step(h, float(np.linalg.norm(v_air)), v_air, t=self._sim_time)
 
@@ -1070,75 +780,33 @@ class UAV(Agent):
         # 3. Physique, a chaque pas
         self._apply_lib_physics(self.last_rpms, gt)
 
-        # Journal principal tous les 10 pas physiques (cadence reguliere)
+        # Journal principal tous les 10 pas
         if self._tick % 10 == 0:
             self._log_full_state(gt)
 
     def _update_control_loop(self, gt):
-        """
-        High-Level Control Loop (100 Hz).
-        Orchestrates sensor fusion, state estimation, communication, planning, and motor control.
+        """Boucle de controle : IMU et GNSS, filtre, communication, choix de la cible, commande PID."""
 
-        **Sensor Fusion:**
-        - Processes noisy GNSS measurements with jittered update intervals
-        - EKF prediction using IMU acceleration and orientation
-        - Maintains corrected position and velocity estimates
-
-        **Communication:**
-        - Broadcasts state to swarm at regular intervals
-        - Listens for swarm and radar messages
-
-        **Target Logic:**
-        - Swarm Mode: Follows leader's predicted state
-        - Planning Mode: Decelerates during path calculation
-        - Autonomous Mode: Navigates waypoints via A* with replanning and failsafe
-
-        **Collision Avoidance:**
-        - Computes repulsive forces from obstacles and neighbors
-
-        **Control:**
-        - Generates motor RPMs via PID controller with target position, velocity, and yaw
-
-        Args:
-            gt (dict): Ground truth state with pos, vel, orn_q, ang_vel
-
-        Returns:
-            None (updates self.last_rpms)
-        """
-
-        true_orn_q = np.array(gt["orn_q"])  # attitude PHYSIQUE (surveillance)
+        true_orn_q = np.array(gt["orn_q"])  # attitude vraie
         ang_vel = np.array(gt["ang_vel"])
 
-        # ==================== ADVANCED SENSOR FUSION ====================
+        # --- NAVIGATION ---
 
-        # ORDRE DU FILTRE : predict PUIS update, et on publie l'etat CORRIGE
-        # (corriger avant de propager appliquerait la mesure a une prediction
-        # perimee).
+        # Predict puis update ; on publie l'etat corrige
 
-        # 1. Lecture de l'IMU (acceleration + vitesse angulaire)
-        # Le pas reel entre deux appels est passe explicitement : la boucle est
-        # cadencee par `_sim_time`, qui avance par multiples du dt physique,
-        # donc l'intervalle effectif n'est pas exactement CTRL_DT. Comme
-        # acc = dv/dt, utiliser un dt errone biaise directement l'acceleration.
+        # 1. IMU, sur le pas reel depuis le dernier appel
         imu_dt = self._sim_time - self.last_ctrl_time
         self._ctrl_elapsed = imu_dt
         imu_acc, imu_gyro = self.imu.measure(gt["vel"], gt["orn_q"], ang_vel=gt["ang_vel"], dt=imu_dt)
         self.last_imu_gyro = imu_gyro
 
-        # 2. Propagation inertielle
-        #  - ESKF : propage sa PROPRE attitude a partir du gyrometre ;
-        #  - KF6  : n'estime pas l'attitude, on lui fournit l'attitude vraie a
-        #           mi-intervalle (celle avec laquelle l'IMU a projete).
+        # 2. Propagation (l'ESKF propage sa propre attitude, le KF6 recoit l'attitude vraie)
         if self.filter_type == "eskf":
             self.ekf.predict(imu_acc, imu_gyro, dt=imu_dt)
         else:
             self.ekf.predict(imu_acc, self.imu.q_mid, dt=imu_dt)
 
-        # 3. Correction GNSS (cadence propre, avec gigue)
-        # NB : meas_* dans les logs sont les sorties GNSS brutes, l'estimee du
-        # filtre est journalisee separement. Pendant une coupure, le recepteur
-        # ne delivre rien : on garde la derniere mesure pour les logs et le
-        # filtre poursuit en inertie pure.
+        # 3. Correction GNSS ; pendant une coupure le filtre continue en inertie pure
         self._gnss_updated = False
         if self._sim_time >= self.next_gnss_trigger:
             meas_pos, meas_vel = self.gnss.measure(gt["pos"], gt["vel"], t=self._sim_time)
@@ -1154,11 +822,8 @@ class UAV(Agent):
                     np.linalg.norm(np.asarray(meas_pos, dtype=float) - np.asarray(gt["pos"], dtype=float))
                 )
 
-            # Prochaine echeance : periode nominale + gigue positive (sans derive)
+            # Prochaine mesure : echeancier periodique + gigue, sans accumulation
             jitter = max(0.0, random.gauss(self.gnss_delay_mean, self.gnss_delay_std))
-            # Echeancier nominal strictement periodique : la gigue decale CHAQUE
-            # mesure sans s'accumuler. (Le max(..., t) rattrapait l'instant de
-            # mesure, gigue comprise : le recepteur tournait a 9.1 Hz au lieu de 10.)
             self.last_gnss_nominal_time += self.gnss_dt
             self.next_gnss_trigger = self.last_gnss_nominal_time + jitter
 
@@ -1195,24 +860,21 @@ class UAV(Agent):
         if not self.is_planning and self.wp_idx < len(self.waypoints):
             self._hold_pos = None  # point de maintien reinitialise en route
 
-        # 1. Suiveur d'essaim : position ET vitesse de consigne de la formation.
-        # La vitesse sert d'anticipation : sans elle le suiveur poursuit une
-        # cible qui avance, avec un retard permanent.
+        # 1. Suiveur : position et vitesse de consigne de la formation
         if self.swarm_active and not self.leader:
             fs = self.future_state or {}
             if fs.get("pos") is not None:
                 target_pos = np.asarray(fs["pos"], dtype=float)
             if fs.get("vel") is not None:
                 target_vel = np.asarray(fs["vel"], dtype=float)
-                # Le message arrive avec ~0.1 s de retard : on extrapole la cible.
+                # Message recu avec retard : on extrapole la cible
                 if fs.get("t") is not None:
                     age = float(np.clip(self._sim_time - float(fs["t"]), 0.0, 0.5))
                     target_pos = target_pos + target_vel * age
 
         # 2. Planning (Wait)
         elif self.is_planning:
-            # Attente du plan : on freine vers le point ou la planification a
-            # commence (point fixe, pas `pos` qui annulerait le terme P).
+            # En attente du plan : maintien sur place
             if self._hold_pos is None:
                 self._hold_pos = np.array(pos, dtype=float)
             target_pos = self._hold_pos
@@ -1221,28 +883,18 @@ class UAV(Agent):
         else:
             # --- FAILSAFE CHECK ---
             if self.calculation_fail_count > 5:
-                print(f"[{self.name}] ⚠️ Too many A* failures ({self.calculation_fail_count}). Skipping WP.")
+                print(f"[{self.name}] Too many A* failures ({self.calculation_fail_count}). Skipping WP.")
                 self.wp_idx += 1
                 self.calculation_fail_count = 0
                 self.replan_timer = 0
                 return  # Skip this cycle to reset logic
-            # ----------------------
 
             else:
                 # Detect arrival at Waypoint
                 if self.wp_idx < len(self.waypoints):
                     dist_wp = np.linalg.norm(self.waypoints[self.wp_idx] - pos)
 
-                    # --- GARDE-FOU 5 : critere d'arrivee avec capture ---------
-                    # Le seul test `dist < 0.5 m` est fragile : un drone qui
-                    # arrive trop vite, ou dont l'assiette est bornee, decrit une
-                    # orbite autour du waypoint sans jamais entrer dans la
-                    # tolerance. Il reste alors bloque sur ce waypoint pour toute
-                    # la simulation, sans message. On accepte donc l'arrivee aussi
-                    # lorsque le waypoint a ete approche puis depasse : on memorise
-                    # la distance minimale atteinte et on valide des qu'on s'en
-                    # eloigne de nouveau. C'est la logique de sequencement usuelle
-                    # en guidage.
+                    # Arrivee : dans la tolerance, ou waypoint approche puis depasse
                     if self.wp_idx != self._wp_track_idx:
                         self._wp_track_idx = self.wp_idx
                         self._wp_min_dist = np.inf
@@ -1262,10 +914,7 @@ class UAV(Agent):
                         self.replan_timer = 0
                         self.calculation_fail_count = 0  # compteur propre a chaque WP
 
-                # Planification : une fois par waypoint. Quand le chemin A* a ete
-                # entierement parcouru, il reste moins de 0.7 m jusqu'au waypoint :
-                # on y va en ligne droite (relancer A* si pres du but ferait
-                # freiner le drone a chaque waypoint).
+                # Un seul calcul A* par waypoint
                 if (
                     self.wp_idx < len(self.waypoints)
                     and len(self.active_path) == 0
@@ -1287,15 +936,10 @@ class UAV(Agent):
                 target_pos = local_target
 
             elif self.wp_idx < len(self.waypoints):
-                # Pas (ou plus) de chemin : ligne droite vers le waypoint. Le
-                # sequencement est gere en un seul endroit (garde-fou 5) ; le
-                # second test d'arrivee qui existait ici pouvait faire sauter
-                # deux waypoints proches dans le meme pas.
+                # Pas de chemin : ligne droite vers le waypoint
                 target_pos = self.waypoints[self.wp_idx]
             else:
-                # Mission terminee : maintien sur un point FIXE. Viser `pos` a
-                # chaque pas annule le terme proportionnel : le drone ne tenait
-                # plus que sur l'amortissement en vitesse et derivait au vent.
+                # Mission terminee : maintien sur un point fixe
                 if self._hold_pos is None:
                     self._hold_pos = np.array(pos, dtype=float)
                 target_pos = self._hold_pos
@@ -1304,7 +948,6 @@ class UAV(Agent):
             self.replan_timer -= 1
 
         # --- CONTROL COMMANDS ---
-        # (voir _limit_tilt_demand plus bas pour la limitation d'assiette)
         self.current_target_pos = target_pos
 
         # Repulsive Force
@@ -1323,19 +966,11 @@ class UAV(Agent):
         else:
             f_rep = np.zeros(3)
 
-        # La "force" repulsive est convertie en increment de vitesse de consigne
-        # par un gain explicite [s], independant de la frequence de controle.
+        # Force repulsive convertie en vitesse de consigne (gain en s)
         acc_rep = f_rep / self.mass
         final_target_vel = np.asarray(target_vel, dtype=float) + acc_rep * self.repulsion_gain_s
 
-        # --- GARDE-FOU 6 : vol pres du sol ---------------------------------
-        # Au decollage, les suiveurs recoivent une cible qui part deja a la
-        # vitesse du leader. Ils acceleraient a l'horizontale (3 a 5 m/s) a
-        # 0.2-0.9 m d'altitude, inclines a 30 deg : un rotor touchait le sol et
-        # le drone basculait. C'etait la cause de TOUS les retournements
-        # observes (8 sur 72 vols, toujours un suiveur, entre 1.4 et 1.8 s).
-        # Sous `ground_clear_alt`, la vitesse horizontale et l'inclinaison
-        # admissibles sont reduites progressivement.
+        # Pres du sol : vitesse horizontale et inclinaison reduites
         self._ground_factor = float(
             np.clip(
                 (float(pos[2]) - self.ground_min_alt)
@@ -1359,32 +994,17 @@ class UAV(Agent):
         vector_to_target = final_target_pos - pos
         dist_to_target = np.linalg.norm(vector_to_target)
         if dist_to_target > self.lookahead_m:
-            # Cible virtuelle a distance bornee, continue en fonction de la distance.
+            # Cible virtuelle a lookahead_m au plus
             virtual_target_pos = pos + (vector_to_target / dist_to_target) * self.lookahead_m
         else:
             virtual_target_pos = final_target_pos
 
-        # --- GARDE-FOU 3 : limitation de l'assiette commandee -----------------
-        # DSLPIDControl construit son axe de poussee a partir de
-        #     target_thrust = P*pos_e + I*integrale + D*vel_e + [0, 0, m*g]
-        # L'inclinaison commandee vaut donc atan(|composante horizontale| / m*g).
-        # Avec les gains CF2X (P_xy=0.4, D_xy=0.2) et m*g = 0.265 N, une erreur
-        # de 1 m plus une consigne de 5 m/s demandent 1.40 N d'effort horizontal,
-        # soit 79 deg d'inclinaison : une rafale ou une force repulsive suffit
-        # alors a franchir 90 deg. Or au-dela de 90 deg le drone est irrecuperable :
-        # DSLPIDControl calcule scalar_thrust = max(0, target_thrust . z_corps),
-        # qui devient nul des que l'axe corps pointe vers le bas. La poussee tombe
-        # au minimum, le drone reste colle au sol jusqu'a la fin de la simulation
-        # et aucun message n'est emis. C'etait la cause des drones bloques au sol.
-        # On borne donc la demande horizontale pour rester sous max_tilt_deg.
+        # Limites de poussee et d'inclinaison
         virtual_target_pos, final_target_vel = self._limit_tilt_demand(
             virtual_target_pos, final_target_vel, pos, vel
         )
 
-        # --- GARDE-FOU 4 : detection de perte de controle ---------------------
-        # Si malgre tout le drone s'est retourne, on le signale une fois : sans
-        # cela l'anomalie est totalement silencieuse dans les logs.
-        # Attitude PHYSIQUE (verite), pas l'estimee : on surveille le drone reel.
+        # Detection de retournement (attitude vraie)
         tilt = float(
             np.degrees(
                 np.arccos(
@@ -1394,11 +1014,7 @@ class UAV(Agent):
         )
         if tilt > 90.0 and not self._loss_of_control:
             self._loss_of_control = True
-            print(
-                f"[{self.name}] PERTE DE CONTROLE a t={self._sim_time:.2f}s : "
-                f"inclinaison {tilt:.0f} deg (> 90). La poussee commandee "
-                f"s'annule, le drone ne peut plus se redresser."
-            )
+            print(f"[{self.name}] Perte de controle a t={self._sim_time:.2f}s (inclinaison {tilt:.0f} deg)")
 
         # Yaw
         direction_vec = final_target_pos - pos
@@ -1412,14 +1028,7 @@ class UAV(Agent):
         elif np.linalg.norm(direction_vec[:2]) > 0.5:
             self.target_yaw_cache = np.arctan2(direction_vec[1], direction_vec[0])
 
-        # --- GARDE-FOU 7 : consigne de lacet a vitesse bornee ----------------
-        # La consigne de lacet sautait d'un coup (vers le waypoint suivant, ou au
-        # lacet de la formation) : 176 deg d'un pas sur un cas mesure. Le PID de
-        # DSL convertit une telle marche en couple de lacet maximal ; les quatre
-        # moteurs saturent (21 666 tr/min), il ne reste plus de marge pour le
-        # roulis et le tangage, et l'inclinaison derive librement (~100 deg/s)
-        # jusqu'au retournement. On fait donc tourner la consigne vers le lacet
-        # desire a vitesse limitee.
+        # Consigne de lacet a vitesse bornee (un saut de lacet sature les moteurs)
         dyaw = float(
             np.arctan2(
                 np.sin(self.target_yaw_cache - self._yaw_cmd), np.cos(self.target_yaw_cache - self._yaw_cmd)
@@ -1437,7 +1046,7 @@ class UAV(Agent):
 
         # Compute RPMs (PID)
         rpms, _, _ = self.ctrl.computeControlFromState(
-            control_timestep=self._ctrl_elapsed,  # pas REEL depuis le dernier appel
+            control_timestep=self._ctrl_elapsed,  # pas reel depuis le dernier appel
             state=state_vec,
             target_pos=virtual_target_pos,
             target_vel=final_target_vel,
@@ -1447,18 +1056,7 @@ class UAV(Agent):
         self.last_rpms = rpms
 
     def _apply_lib_physics(self, rpms, gt):
-        """
-        Apply physics simulation to the UAV using rotor RPM values.
-        Converts RPM to thrust forces and torques, applies them to the quadrotor,
-        and simulates aerodynamic drag accounting for wind effects.
-
-        Parameters
-        ----------
-        rpms : array-like
-            Rotational speeds (RPM) of the four rotors, shape (4,)
-        gt : dict
-            Ground truth state with 'orn_q' (quaternion) and 'vel' (velocity)
-        """
+        """Poussee et couple des rotors, trainee aerodynamique sur la vitesse air."""
         rpms = np.clip(rpms, 0, self.MAX_RPM)
         forces = np.array(rpms**2) * self.KF
         torques = np.array(rpms**2) * self.KM
@@ -1478,10 +1076,7 @@ class UAV(Agent):
             self.bodyId, 4, [0, 0, z_torque], p.LINK_FRAME, physicsClientId=self.physics_client_id
         )
 
-        # Trainee aerodynamique (modele gym-pybullet-drones), calculee sur la
-        # vitesse AIR : c'est par elle que le vent agit sur le drone.
-        # La force est exprimee en repere CORPS et appliquee avec LINK_FRAME
-        # (la convertir en repere monde la ferait tourner deux fois).
+        # Trainee (modele gym-pybullet-drones), en repere corps, sur la vitesse air
         rot = np.array(p.getMatrixFromQuaternion(gt["orn_q"])).reshape(3, 3)
         v_air_body = rot.T @ (np.asarray(gt["vel"], dtype=float) - self.current_wind)
         prop_wash_factor = np.sum(2 * np.pi * rpms / 60)
@@ -1496,16 +1091,7 @@ class UAV(Agent):
         )
 
     def _log_full_state(self, gt):
-        """
-        Log the complete state of the UAV to a CSV file.
-        Logs ground truth position and velocity, measured position with GNSS error,
-        current wind conditions, repulsive forces, nearest neighbor distance, target
-        tracking information, and collision status.
-        :param self: The UAV instance
-        :param gt: Dictionary containing ground truth data with keys 'pos' (position)
-                   and 'vel' (velocity)
-        :return: None
-        """
+        """Ajoute une ligne au journal principal <nom>.csv."""
         # Detect collision (simple proximity check for log flag)
         collision_flag = 0
         if len(p.getContactPoints(self.bodyId)) > 0:

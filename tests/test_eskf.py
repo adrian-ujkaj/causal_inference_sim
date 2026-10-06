@@ -32,9 +32,7 @@ def _concat(results):
     return pd.concat(results, ignore_index=True)
 
 
-# ----------------------------------------------------------------------
 # Capteurs
-# ----------------------------------------------------------------------
 def test_imu_gyro_reproduces_exact_rotation():
     """Le gyro doit delivrer l'increment angulaire qui reproduit la rotation vraie."""
     imu = IMUSensor({}, dt=0.0125)
@@ -65,9 +63,7 @@ def test_gnss_outage_and_reported_accuracy():
     assert np.isclose(g.last_pos_std, 2.0) and np.isclose(g.last_vel_std, 1.0)
 
 
-# ----------------------------------------------------------------------
 # ESKF
-# ----------------------------------------------------------------------
 def test_alignment_from_accelerometer():
     f = ESKF(0.0125)
     q_true = Q.from_euler(0.2, -0.15, 0.0)

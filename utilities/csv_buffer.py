@@ -1,15 +1,5 @@
-"""
-Ecriture CSV bufferisee.
-
-Ouvrir et fermer un fichier a chaque ligne (open(..., "a") dans la boucle de
-controle) coute cher : a 80 Hz et 4 drones, c'est plusieurs centaines
-d'ouvertures de fichier par seconde simulee. On accumule donc les lignes en
-memoire et on les ecrit par paquets.
-
-Les lignes en attente sont ecrites a la fermeture explicite (close), et en
-dernier recours a la sortie de l'interpreteur (atexit), pour ne rien perdre si
-la simulation est interrompue.
-"""
+"""Ecriture CSV par paquets : ouvrir le fichier a chaque ligne coute cher dans la boucle
+de controle. Les lignes en attente sont ecrites par close() ou a la sortie du programme."""
 
 from __future__ import annotations
 

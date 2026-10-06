@@ -1,24 +1,19 @@
-"""
-Etude causale complete, reproductible (Windows / Linux) :
+"""Etude causale complete :
+  1. trois campagnes de vols apparies (memes graines) : base, gnss_fort (GNSS de drone_1
+     brouille, bruit x100 entre 8 et 22 s) et vent_fort (turbulence 80 au lieu de 10 sur
+     drone_2, entre 8 et 22 s) ;
+  2. analyse causale de chaque campagne ;
+  3. validation : effet mesure de chaque intervention, compare aux conclusions de l'analyse.
 
-  1. trois campagnes de vols APPARIES (memes graines 1..N) :
-       base      : configuration nominale ;
-       gnss_fort : GNSS de drone_1 seul fortement brouille entre 8 et 22 s (bruit x100) ;
-       vent_fort : turbulence tres forte (80 au lieu de 10) sur drone_2 seul,
-                   entre 8 et 22 s ;
-  2. analyse causale observationnelle de chaque campagne ;
-  3. validation interventionnelle : effet mesure de chaque intervention sur
-     chaque drone, confronte a ce que l'analyse observationnelle a conclu.
-
-Les 3 figures a regarder sont copiees dans runs/causal/RESULTATS/ :
-  1_verification.png        ce qui s'est vraiment passe / ce que l'analyse en deduit
-  2_qui_influence_qui.png   graphe des interactions appris par le NRI (vols normaux)
+Les figures a regarder sont copiees dans runs/causal/RESULTATS/ :
+  1_verification.png        effet reel / causes trouvees par l'analyse
+  2_qui_influence_qui.png   graphe d'interactions NRI (vols normaux)
   3_causes_vol_normal.png   causes des defaillances en vol normal
 
-  python analysis/run_causal_study.py                 # 24 vols x 30 s par campagne
-  python analysis/run_causal_study.py --runs 8 --skip_sim   # analyses seules
-Duree indicative : 10 a 40 min par campagne selon la machine, ~5 min par analyse.
-"""
+    python analysis/run_causal_study.py                       # 24 vols x 30 s par campagne
+    python analysis/run_causal_study.py --runs 8 --skip_sim   # analyses seules
+
+Compter 10 a 40 min par campagne selon la machine."""
 
 import argparse
 import json

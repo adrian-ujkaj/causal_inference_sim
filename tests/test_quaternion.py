@@ -28,7 +28,6 @@ def test_mul_matches_pybullet():
         _, q_pb = p.multiplyTransforms([0, 0, 0], a, [0, 0, 0], b)
         # multiplyTransforms renvoie un resultat en simple precision
         assert same_rot(Q.mul(a, b), q_pb, tol=1e-6)
-        # composition des matrices : R(a (x) b) = R(a) R(b)
         assert np.allclose(Q.to_rot(Q.mul(a, b)), Q.to_rot(a) @ Q.to_rot(b), atol=1e-9)
 
 

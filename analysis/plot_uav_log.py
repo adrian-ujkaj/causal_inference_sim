@@ -40,8 +40,7 @@ def plot_log(path):
     data = load_log_csv(path)
     title = os.path.basename(path)
 
-    # Noms de colonnes du journal actuel (uav.py) -> noms attendus ici.
-    # Le script lisait t / x_true / x_gps / x_ekf, colonnes qui n'existent plus.
+    # Colonnes du journal de uav.py
     alias = {
         "t": "time",
         "x_true": "gt_x",

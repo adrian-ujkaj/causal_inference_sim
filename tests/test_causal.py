@@ -1,6 +1,5 @@
 """
-Tests de l'analyse causale (analysis/causal_analysis.py) et de sa validation
-interventionnelle (analysis/causal_validation.py), sur donnees synthetiques.
+Tests de causal_analysis.py et causal_validation.py sur donnees synthetiques.
 Lancer depuis la racine du depot :  python -m pytest tests -q
 """
 
@@ -29,9 +28,7 @@ def _args(**kw):
     return a
 
 
-# ----------------------------------------------------------------------
 # Briques elementaires
-# ----------------------------------------------------------------------
 def test_persist_and_onsets():
     m = np.array([0, 1, 1, 0, 1, 1, 1, 0], bool)[:, None]
     p = ca.persist(m, 3)
@@ -48,7 +45,7 @@ def test_known_adjacency():
 
 
 def _logs(T=400, dt=0.05, yaw_rate=0.3, follower_noise=0.0, seed=0):
-    """Leader en virage, suiveurs a poste fixe dans SON repere, drone_3 immobile."""
+    """Leader en virage, suiveurs fixes dans le repere du leader, drone_3 immobile."""
     rng = np.random.default_rng(seed)
     t = np.arange(T) * dt
     psi = yaw_rate * t
@@ -77,7 +74,7 @@ def _logs(T=400, dt=0.05, yaw_rate=0.3, follower_noise=0.0, seed=0):
 
 
 def test_formation_error_in_leader_frame():
-    """Formation rigide qui tourne avec le leader : erreur nulle (dans le repere monde, elle ne l'est pas)."""
+    """Formation rigide qui tourne avec le leader : erreur nulle dans son repere."""
     fe = ca.formation_error(_logs(), ST, settle_s=1.0)
     assert np.abs(fe[:, 1:3]).max() < 1e-6
     assert np.all(fe[:, [0, 3]] == 0)
@@ -90,7 +87,7 @@ def test_outcomes_thresholds():
     nav = out.active["nav_degradation"][:, 3]
     assert nav[:200].sum() == 0 and nav[210:240].all()
     assert out.active["formation_loss"].sum() == 0
-    assert not out.applicable["formation_loss"][0]  # pas de formation pour le leader
+    assert not out.applicable["formation_loss"][0]
 
 
 def test_validate_graph_auroc():
@@ -103,9 +100,7 @@ def test_validate_graph_auroc():
     assert v2["auroc"] == 0.0
 
 
-# ----------------------------------------------------------------------
-# Decodeur NRI : permutation des grandeurs RELATIVES
-# ----------------------------------------------------------------------
+# Decodeur NRI
 def test_decoder_permutation_identity_and_type0():
     torch.manual_seed(0)
     send, recv = ca.edge_index(4)
@@ -118,7 +113,7 @@ def test_decoder_permutation_identity_and_type0():
     z[..., 1] = 1.0
     base = dec(x, u, z, send, recv, vh=vh)
     same = dec(x, u, z, send, recv, perm_edge=0, perm_idx=torch.arange(B), vh=vh)
-    assert torch.allclose(base, same)  # permutation identite : rien ne change
+    assert torch.allclose(base, same)
     perm = dec(x, u, z, send, recv, perm_edge=0, perm_idx=torch.roll(torch.arange(B), 1), vh=vh)
     r = int(recv[0])
     others = [i for i in range(4) if i != r]
@@ -137,9 +132,7 @@ def test_nri_dataset_shapes_and_takeoff_excluded():
     assert x.shape[0] == len(np.arange(200)[lg.times >= 3.0][::4])
 
 
-# ----------------------------------------------------------------------
 # Validation interventionnelle
-# ----------------------------------------------------------------------
 def test_parse_intervention_and_window():
     assert cv.parse_intervention("j=runs/x:10:20") == ("j", "runs/x", 10.0, 20.0)
     assert cv.parse_intervention("w=runs/y") == ("w", "runs/y", None, None)
@@ -184,11 +177,7 @@ def _write_run(d, lg):
 
 
 def test_paired_intervention_recovers_affected_drone(tmp_path):
-    """
-    On deplace drone_1 de 0.5 m entre 10 et 20 s dans les vols intervenus.
-    La double difference doit trouver drone_1 affecte, et NI le leader NI le
-    drone independant ; une paire rompue avant l'intervention est exclue.
-    """
+    """Seul drone_1, deplace entre 10 et 20 s, est detecte ; la paire rompue est exclue."""
     for k in range(1, 7):
         b = _logs(T=600, follower_noise=0.02, seed=k)
         i = _logs(T=600, follower_noise=0.02, seed=k)
@@ -221,14 +210,13 @@ def test_paired_intervention_recovers_affected_drone(tmp_path):
     assert r["drones_affectes"] == ["drone_1"]
     ace = {(x["mesure"], x["drone"]) for x in r["ace_significatifs"]}
     assert ("ace_nav_degradation", "drone_1") in ace
-    # la quasi-collision est une grandeur de PAIRE (distance au plus proche) :
-    # deplacer drone_1 change mecaniquement celle des autres, on l'exclut ici
+    # near_miss exclu : grandeur de paire, deplacer drone_1 la change aussi pour les autres
     assert not any(d == "drone_0" for m, d in ace if "near_miss" not in m)
     assert (out / "resume_etude.png").exists()
 
 
 def test_granger_detects_lagged_cause():
-    """Granger fonctionne (quelle que soit la version de statsmodels) et trouve x -> y."""
+    """Le test de Granger trouve la cause retardee x -> y."""
     rng = np.random.default_rng(1)
     x = rng.standard_normal(300)
     y = np.r_[0.0, 0.0, 0.8 * x[:-2]] + 0.3 * rng.standard_normal(300)

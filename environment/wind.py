@@ -2,43 +2,13 @@ import numpy as np
 
 
 class DrydenGustModel:
-    """
-    Turbulence atmospherique, modele de Dryden basse altitude (MIL-F-8785C).
+    """Turbulence de Dryden basse altitude (MIL-F-8785C).
 
-    Parametres du modele (h en ft, W20 = vent a 20 ft)
-    ---------------------------------------------------
-        sigma_w = 0.1 * W20
-        sigma_u = sigma_v = sigma_w / (0.177 + 0.000823 h) ** 0.4
-        L_w = h
-        L_u = L_v = h / (0.177 + 0.000823 h) ** 1.2
-    `turbulence_intensity_knots` est W20, en noeuds. Avec W20 = 10 kt pres du sol,
-    on obtient sigma_u ~ 1.0 m/s et sigma_w ~ 0.5 m/s.
-
-    Realisation numerique
-    ---------------------
-    Chaque composante est un processus de Gauss-Markov du premier ordre
-        x(k+1) = a x(k) + sigma sqrt(1 - a^2) n(k),    a = exp(-V dt / L)
-    qui a EXACTEMENT l'ecart-type sigma et le temps de correlation L / V du
-    modele de Dryden. C'est l'approximation usuelle : le spectre longitudinal
-    est celui de Dryden ; pour v et w (second ordre chez Dryden), la pente haute
-    frequence differe, mais variance et longueur de correlation sont respectees.
-    Avantage decisif : l'etat EST la rafale. Quand l'altitude ou la vitesse
-    changent, on change a et sigma sans discontinuite de la rafale.
-
-    Repere : u est porte par la vitesse air horizontale par rapport au vent
-    MOYEN (l'appelant ne doit pas y inclure la rafale, sinon la direction des
-    rafales tourne au hasard), v lui est perpendiculaire dans le plan
-    horizontal, w est vertical. La sortie est en repere MONDE.
-
-    Rafale forte sur une fenetre (scenarios de test) : `burst=(t0, t1, W20)`
-    porte l'intensite a W20 entre t0 et t1. L'etat de la rafale est remis a
-    l'echelle au changement de niveau : meme realisation aleatoire, intensite
-    multipliee. Sans fenetre, le comportement est inchange.
-
-    Points d'attention verifies par les tests (tests/test_simulation_fixes.py) :
-    bruit mis a l'echelle du pas de temps, sigma_w = 0.1 * W20 converti des
-    noeuds, ecart-type et correlation conformes au modele.
-    """
+    Chaque composante est un processus de Gauss-Markov du premier ordre, avec l'ecart-type
+    et la longueur de correlation du modele (W20 en noeuds, h en ft dans les formules).
+    u suit la vitesse air horizontale par rapport au vent moyen, w est vertical ; sortie en
+    repere monde. burst=(t0, t1, W20) : turbulence plus forte entre t0 et t1 (meme tirage,
+    intensite multipliee)."""
 
     KNOT_TO_FTS = 1.68781
     FT_TO_M = 0.3048
@@ -59,12 +29,10 @@ class DrydenGustModel:
         # (t0, t1, W20) : intensite W20 entre t0 et t1, None sinon
         self.burst = None if burst is None else tuple(float(x) for x in burst)
         self.mean_wind = np.asarray(mean_wind, dtype=float).reshape(3)
-        # Dryden suppose un ecoulement : en vol stationnaire la vitesse air est
-        # nulle et le temps de correlation L / V infini. On borne V par dessous.
+        # V borne par dessous (en stationnaire, L / V serait infini)
         self.min_airspeed = float(min_airspeed)
 
-        # Generateur dedie. Sans graine explicite, il est tire du generateur
-        # global : simulation.seed rend donc le vent reproductible.
+        # Generateur dedie (reproductible via simulation.seed)
         if seed is None:
             seed = int(np.random.randint(0, 2**31 - 1))
         self._rng = np.random.default_rng(int(seed))
@@ -73,7 +41,6 @@ class DrydenGustModel:
         self._heading = np.array([1.0, 0.0])
         self.last_sigmas = np.zeros(3)  # diagnostic
 
-    # ------------------------------------------------------------------
     def _params(self, h_m: float, V_ms: float):
         """Ecarts-types [m/s] et longueurs de correlation [m] pour (h, V)."""
         h = max(float(h_m) * self.M_TO_FT, 10.0)  # validite du modele : h >= 10 ft
@@ -98,15 +65,8 @@ class DrydenGustModel:
         self.turbulence_level = level
 
     def step(self, h_meters, V_ms, airspeed_vec=None, t=None):
-        """
-        Avance d'un pas et renvoie le vent total (moyen + rafale) en repere monde.
-
-        h_meters     : altitude [m]
-        V_ms         : norme de la vitesse air [m/s]
-        airspeed_vec : vitesse air (vitesse sol - vent) en repere monde, pour
-                       orienter u ; optionnel, sinon l'orientation precedente.
-        t            : temps de simulation [s], utilise par la fenetre `burst`.
-        """
+        """Avance d'un pas et renvoie le vent total (moyen + rafale) en repere monde.
+        airspeed_vec (vitesse sol - vent moyen) oriente u ; t sert a la fenetre burst."""
         if self.burst is not None and t is not None:
             t0, t1, level = self.burst
             self._set_level(level if t0 <= t < t1 else self.base_level)
@@ -121,8 +81,7 @@ class DrydenGustModel:
                 self._heading = a / n
 
         if self._gust is None:
-            # Initialisation dans le regime stationnaire : pas de montee en
-            # charge artificielle de la turbulence au debut de la simulation.
+            # Premier pas : tirage dans le regime stationnaire
             self._gust = self._rng.normal(0.0, 1.0, 3) * sig
         else:
             a_k = np.exp(-V * self.dt / L)

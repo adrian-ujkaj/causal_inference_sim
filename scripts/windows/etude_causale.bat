@@ -3,8 +3,7 @@ REM Etude causale complete avec le Python du projet (.conda, cree par setup_wind
 REM   Double-clic                       : etude complete (24 vols x 3 campagnes, 1 a 3 h)
 REM   etude_causale.bat --runs 6        : version rapide
 REM   etude_causale.bat --skip_sim      : analyses seules sur les vols deja simules
-REM NB : pas de %%PY%% dans un bloc entre parentheses : un ")" dans le chemin du
-REM dossier fermerait le bloc et cmd s'arreterait sans message.
+REM Pas de %%PY%% dans un bloc entre parentheses : un ")" dans le chemin casserait le bloc.
 cd /d "%~dp0..\.."
 set "PY=%CD%\.conda\python.exe"
 if not exist "%PY%" goto :nopython

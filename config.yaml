@@ -49,7 +49,7 @@ agents:
         ip : "localhost"
         pos: [0,0,0]
 
-  #------------------- SUIVEURS (Décalés pour éviter la Sphère à -2,1) ------------------------
+  #------------------- SUIVEURS ------------------------
   - type: "uav"
     name: "drone_1"
     swarm_id: "A"
@@ -94,7 +94,7 @@ agents:
         ip : "localhost"
         pos: [0,0,0]
 
-
+  #------------------- DRONE INDEPENDANT ------------------------
   - type: "uav"
     name: "drone_3"
     urdf_path: "assets/quadrotor.urdf"
@@ -118,7 +118,7 @@ agents:
         ip : "localhost"
         pos: [0,0,0]
 
-
+  #------------------- RADAR ------------------------
   - name: "Radar_Alpha"
     type: "radar"
     pos: [3, 3, 0]      

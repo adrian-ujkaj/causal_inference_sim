@@ -6,41 +6,7 @@ import os
 
 
 class World:
-    """
-    World class for managing physics simulation environment and city generation.
-    This class initializes a PyBullet physics client and provides utilities for
-    generating procedural city environments with buildings and obstacles.
-    Attributes:
-        p: PyBullet module reference for physics operations.
-        physics_client_id (int): Unique identifier for the PyBullet physics client.
-        obstacle_ids (list[int]): List of PyBullet body IDs for obstacles in the world.
-    Methods:
-        __init__(physics_client_id: int) -> None:
-            Initializes the World with a physics client, sets gravity, and configures
-            the simulation environment.
-        generate_city_urdf(config: dict) -> list[dict]:
-            Generates a procedural city layout and creates a URDF file with buildings.
-            Args:
-                config (dict): Configuration dictionary with optional keys:
-                    - filename (str): Name of the URDF file to generate. Default: "city"
-                    - n_blocks_x (int): Number of city blocks along X-axis. Default: 4
-                    - n_blocks_y (int): Number of city blocks along Y-axis. Default: 4
-                    - block_size (float): Size of each block in meters. Default: 20.0
-                    - road_width (float): Width of roads between blocks in meters. Default: 4.0
-                    - buildings_per_side (int): Number of buildings per side within a block. Default: 3
-            Returns:
-                list[dict]: List of building dictionaries, each containing:
-                    - id (int): Unique building identifier
-                    - center (list[float]): [x, y, height] coordinates of building center
-                    - height (float): Height of the building in meters
-                    - width (float): Width of the building in meters
-                    - length (float): Depth/length of the building in meters
-            The generated URDF file includes:
-            - Ground plane (asphalt) as the base world link
-            - Procedurally generated buildings with random heights (30-50m) and colors
-            - Fixed joints attaching all buildings to the ground plane
-            - Inertial, visual, and collision properties for each building
-    """
+    """Monde PyBullet (gravite, sol) et generation d'une ville procedurale en URDF."""
 
     def __init__(self, physics_client_id: int):
         self.p = p
@@ -59,10 +25,7 @@ class World:
         road_width = config.get("road_width", 4.0)
 
         buildings_per_side = config.get("buildings_per_side", 3)
-        # Fichier PROPRE A CE PROCESSUS, dans le repertoire temporaire. Ecrire
-        # toujours assets/city.urdf faisait que deux simulations lancees en
-        # parallele se corrompaient mutuellement (lecture d'un fichier en cours
-        # d'ecriture par l'autre), et le chemin dependait du repertoire courant.
+        # Un fichier par processus, pour pouvoir lancer plusieurs simulations en parallele
         import tempfile
 
         city_file = os.path.join(tempfile.gettempdir(), f"{filename}_{os.getpid()}_{id(self)}.urdf")
@@ -74,8 +37,7 @@ class World:
             f.write('<?xml version="1.0" ?>\n')
             f.write('<robot name="city">\n\n')
 
-            # --- LIEN DE BASE (Le sol) ---
-            # --- SOL (ASPHALTE) ---
+            # Sol
             total_size_x = n_blocks_x * (block_size + road_width)
             total_size_y = n_blocks_y * (block_size + road_width)
 
@@ -91,8 +53,7 @@ class World:
             f.write('  </link>\n\n')
 
             f.write('  <joint name="ground_joint" type="fixed">\n')
-            # Dalle de 0.1 m centree a z = -0.05 : sa face superieure est a z = 0,
-            # comme le sol de la carte de hauteurs du planificateur.
+            # Face superieure du sol a z = 0
             f.write('    <origin xyz="0 0 -0.05"/>\n')
             f.write('    <parent link="world_link"/><child link="ground_plane"/>\n')
             f.write('  </joint>\n\n')
@@ -103,19 +64,15 @@ class World:
             # Espacement entre les immeubles à l'intérieur d'un bloc
             inner_spacing = block_size / buildings_per_side
 
-            # --- BOUCLE DES BLOCS ---
             for bx in range(n_blocks_x):
                 for by in range(n_blocks_y):
-                    # Calcul du centre du bloc
                     block_center_x = (bx - n_blocks_x / 2.0) * stride + stride / 2.0
                     block_center_y = (by - n_blocks_y / 2.0) * stride + stride / 2.0
 
-                    # --- BOUCLE DES IMMEUBLES DANS LE BLOC ---
                     for ix in range(buildings_per_side):
                         for iy in range(buildings_per_side):
-                            # Hauteur aléatoire (Tours)
                             h = round(random.uniform(30.0, 50.0), 1)
-                            # Largeur ajustée pour laisser un petit espace entre immeubles
+                            # petit espace entre immeubles
                             w = inner_spacing * 0.9
                             d = inner_spacing * 0.9
 
@@ -136,20 +93,18 @@ class World:
                                     "center": [abs_x, abs_y, h],
                                     "height": h,
                                     "width": w,
-                                    "length": d,  # Corrected spelling
+                                    "length": d,
                                 }
                             )
 
-                            mass = 100000.0  # Masse fixe ou calculée (ex: w * d * h * densité)
+                            mass = 100000.0
                             ixx = (1 / 12.0) * mass * (d**2 + h**2)
                             iyy = (1 / 12.0) * mass * (w**2 + h**2)
                             izz = (1 / 12.0) * mass * (w**2 + d**2)
 
                             f.write(f'  <link name="{name}">\n')
 
-                            # --- BLOC INERTIE ---
                             f.write('    <inertial>\n')
-                            # On place l'origine de l'inertie au centre du lien (0 0 0)
                             f.write('      <origin xyz="0 0 0" rpy="0 0 0"/>\n')
                             f.write(f'      <mass value="{mass}"/>\n')
                             f.write(
@@ -157,7 +112,6 @@ class World:
                             )
                             f.write('    </inertial>\n')
 
-                            # --- VISUAL ---
                             f.write('    <visual>\n')
                             f.write(f'      <geometry><box size="{w} {d} {h}"/></geometry>\n')
                             f.write(
@@ -165,13 +119,11 @@ class World:
                             )
                             f.write('    </visual>\n')
 
-                            # --- COLLISION ---
                             f.write('    <collision>\n')
                             f.write(f'      <geometry><box size="{w} {d} {h}"/></geometry>\n')
                             f.write('    </collision>\n')
                             f.write('  </link>\n')
 
-                            # Le joint reste "fixed" pour que le bâtiment ne bouge pas
                             f.write(f'  <joint name="j_{name}" type="fixed">\n')
                             f.write('    <parent link="ground_plane"/>\n')
                             f.write(f'    <child link="{name}"/>\n')

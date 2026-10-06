@@ -1,33 +1,12 @@
 #!/usr/bin/env python3
 """
 Coupure GNSS : derive inertielle et reconvergence, filtre 6 etats contre ESKF.
+Rejeu Monte-Carlo d'une trajectoire vraie (vol PyBullet ou synthetique), les deux
+filtres voyant les memes mesures. Le filtre 6 etats recoit l'attitude vraie.
 
-On rejoue une trajectoire VRAIE (enregistree pendant un vol PyBullet, ou
-synthetique) en regenerant les mesures capteurs N fois avec des bruits et des
-biais differents, et on fait tourner les deux filtres sur EXACTEMENT les memes
-mesures. On coupe le GNSS sur une fenetre choisie.
-
-Ce que la figure doit montrer
------------------------------
-1. Pendant la coupure, le filtre n'a plus que l'inertie : l'erreur derive.
-   La vitesse de derive depend de ce que le filtre a appris AVANT la coupure :
-   un filtre qui a estime les biais capteurs derive moins.
-2. L'enveloppe 3-sigma doit s'ouvrir au meme rythme que l'erreur. Un filtre
-   dont l'erreur sort de son enveloppe ne sait pas qu'il derive : c'est un
-   defaut d'integrite, plus grave qu'une derive annoncee.
-3. Au retour du GNSS, l'erreur doit reconverger en quelques mises a jour.
-
-Precision importante sur la comparaison
----------------------------------------
-Le filtre 6 etats n'estime pas l'attitude : on lui fournit l'attitude VRAIE.
-C'est un avantage qu'aucun systeme reel n'a. Malgre cela, avec un MEMS
-realiste, l'ESKF derive nettement moins, parce qu'il a appris les biais.
-
-Usage
------
+Usage :
   python analysis/gnss_outage.py --truth runs/mc/s1/drone_1_truth.csv --outage 8 18
-  python analysis/gnss_outage.py --synthetic maneuver --duration 60 --outage 30 45
-  options : --runs 40  --imu-preset mems_nav|config_biais  --out runs/outage
+  python analysis/gnss_outage.py --synthetic maneuver --duration 60 --outage 30 45 --runs 40
 """
 
 from __future__ import annotations
@@ -64,10 +43,7 @@ def run(truth, outage, n_runs, imu_cfg, every=2, seed0=1000):
             df["run"] = i
             df["err"] = np.sqrt(df.e_px**2 + df.e_py**2 + df.e_pz**2)
             df["sig3"] = 3.0 * np.sqrt(df.sig_px**2 + df.sig_py**2 + df.sig_pz**2)
-            # Test d'integrite PAR AXE : |e_i| <= 3 sigma_i doit tenir 99.7 % du
-            # temps. Comparer la norme 3D a 3 * sqrt(somme des variances) est bien
-            # plus laxiste (~99.999 % pour un filtre coherent) et laisse passer un
-            # filtre dont l'erreur reelle est 1.5 fois plus grande qu'annoncee.
+            # Integrite par axe (|e_i| <= 3 sigma_i) : le test sur la norme 3D est trop laxiste
             df["in3s"] = (
                 (df.e_px.abs() <= 3 * df.sig_px)
                 & (df.e_py.abs() <= 3 * df.sig_py)
@@ -92,8 +68,7 @@ def metrics(res, outage):
         before = df[(df.time > min(3.0, 0.5 * t0)) & (df.time < t0)]
         end = inside.loc[inside.groupby("run").time.idxmax()]
         nominal = float(np.sqrt((before.err**2).mean()))
-        # Reconvergence : premier instant apres la coupure ou l'erreur repasse
-        # sous 2x le RMSE nominal (et y reste 1 s)
+        # Reconvergence : erreur sous 2x le RMSE nominal pendant au moins 1 s
         reconv = []
         for _, g in df[df.time > t1].groupby("run"):
             g = g.sort_values("time")
@@ -159,12 +134,11 @@ def figure(res, outage, path, title_suffix=""):
     ax.legend(fontsize=8, loc="upper left")
     ax.grid(alpha=0.3, which="both")
 
-    # (b) rapport erreur / enveloppe : > 1 = le filtre ne sait pas qu'il derive
+    # (b) erreur / enveloppe, > 1 si le filtre ne sait pas qu'il derive
     ax = axes[1]
     ax.axvspan(t0, t1, color="0.88", zorder=0)
     for name in ("kf6", "eskf"):
         df = res[name]
-        # pire axe : max_i |e_i| / (3 sigma_i), coherent avec le test d'integrite
         worst = np.maximum.reduce(
             [
                 df.e_px.abs() / (3 * df.sig_px),

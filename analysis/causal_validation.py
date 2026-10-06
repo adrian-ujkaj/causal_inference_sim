@@ -1,50 +1,14 @@
-"""
-Validation INTERVENTIONNELLE de l'analyse causale.
+"""Validation par intervention de l'analyse causale.
 
-L'analyse causale (causal_analysis.py) travaille sur des vols observes : elle
-propose un graphe d'interactions (NRI), des causes de defaillance (modeles
-d'evenements, Granger) et une propagation entre drones (matrice d'impact).
-Ce sont des hypotheses. Ce script les confronte a la realite en simulation :
-on rejoue LES MEMES vols (memes graines) en changeant une seule chose (une
-intervention, au sens de do() de Pearl) et on mesure l'effet sur chaque drone.
+On rejoue les memes vols (memes graines) en changeant une seule chose, et on mesure
+l'effet sur chaque drone : difference intervenu - base vol par vol, IC par bootstrap.
+Les vols ne sont pas reproductibles au bit pres (messages ZMQ) : on utilise une double
+difference (pendant - avant la fenetre) et on exclut les paires qui divergent avant
+l'intervention (--pair_tol).
 
-Plan apparie : vol de base s_k et vol intervenu s_k partagent la graine k, donc
-le meme vent, les memes bruits capteurs et le meme plan. La difference
-(intervenu - base) vol par vol est l'effet causal de l'intervention sur ce vol ;
-sa moyenne est l'effet causal moyen (ACE). Intervalle de confiance : bootstrap
-sur les graines.
+    python analysis/causal_validation.py --base runs/causal/base --intervention gnss_fort=runs/causal/gnss_fort:8:22 --output_dir runs/causal/validation
 
-Mesures par drone :
-  - deplacement : ecart RMS de la position VRAIE entre vol intervenu et vol de
-    base, dans la fenetre d'intervention. C'est l'effet causal le plus direct :
-    si le drone j ne depend pas du drone perturbe, sa trajectoire ne bouge pas.
-
-Les vols ne sont PAS reproductibles au bit pres : l'essaim communique par
-messages asynchrones (ZMQ), donc deux vols de meme graine divergent deja de
-0.1 a 0.3 m AVANT toute intervention, et quelques paires prennent meme une
-autre route autour d'un obstacle (ecart de 14 m des le decollage). D'ou :
-  - paires rompues : si l'ecart de l'essaim avant l'intervention depasse
-    --pair_tol, la paire n'est plus un controle valable et elle est exclue ;
-  - double difference : l'effet sur le deplacement est (ecart PENDANT la
-    fenetre) - (ecart AVANT la fenetre), vol par vol. Sans fenetre (vent
-    applique tout le vol), on garde l'ecart brut et le drone independant sert
-    de temoin.
-  - ACE sur chaque defaillance : difference de la part du temps en defaillance.
-  - ACE sur la grandeur continue (erreur de navigation, erreur de formation).
-    Attention : la quasi-collision est une grandeur de PAIRE (distance au voisin
-    le plus proche). Deplacer un drone change mecaniquement celle de ses
-    voisins sans qu'ils aient reagi : un ACE sur near_miss n'est pas une
-    preuve d'influence sur le comportement du voisin. Le deplacement de
-    trajectoire, lui, l'est.
-
-Utilisation :
-  python analysis/causal_validation.py --base runs/causal/base \\
-      --intervention gnss_d1=runs/causal/gnss_d1:10:20 \\
-      --intervention wind25=runs/causal/wind25 \\
-      --output_dir runs/causal/validation
-  (format : nom=repertoire[:debut:fin], fenetre en secondes ; par defaut tout le
-  vol apres stabilisation.)
-"""
+Format : nom=repertoire[:debut:fin], fenetre en secondes (par defaut tout le vol)."""
 
 from __future__ import annotations
 
@@ -74,7 +38,7 @@ def parse_intervention(spec: str) -> Tuple[str, str, Optional[float], Optional[f
     if "=" not in spec:
         raise ValueError(f"intervention mal formee (nom=repertoire[:debut:fin]) : {spec}")
     name, rest = spec.split("=", 1)
-    # Fenetre lue A DROITE : sous Windows le chemin contient deja "C:".
+    # Fenetre lue a droite (le chemin contient "C:" sous Windows)
     m = re.match(r"^(.+):([^:\\/]*):([^:\\/]*)$", rest)
     if m:
         try:
@@ -173,13 +137,8 @@ def summarize(
     did: bool,
     min_effect: float = 0.05,
 ) -> pd.DataFrame:
-    """
-    Significatif :
-      - ACE : IC 95 % qui exclut 0 ;
-      - deplacement en double difference : IC qui exclut 0 ET effet > min_effect m ;
-      - deplacement brut (pas de fenetre) : borne basse de l'IC au-dessus du
-        95e centile du drone independant (temoin negatif).
-    """
+    """Tableau des effets. Significatif : IC 95 % qui exclut 0 ; pour le deplacement,
+    effet > min_effect m (ou, sans fenetre, au-dessus du drone independant)."""
     rng = np.random.RandomState(seed)
     out = []
     indep = list(st.independents)
@@ -211,14 +170,9 @@ def summarize(
     return pd.DataFrame(out)
 
 
-# ----------------------------------------------------------------------
 # Confrontation avec l'analyse observationnelle
-# ----------------------------------------------------------------------
 def compare_with_analysis(analysis_dir: str, names: List[str]) -> Dict:
-    """
-    Ce que l'analyse observationnelle (lancee sur les vols intervenus) dit, mis
-    en regard de l'effet mesure. Lit les sorties de causal_analysis.py.
-    """
+    """Conclusions de causal_analysis.py sur les vols intervenus."""
     res: Dict[str, object] = {"repertoire_analyse": analysis_dir}
     if not analysis_dir or not os.path.isdir(analysis_dir):
         res["note"] = "analyse observationnelle absente"
@@ -269,9 +223,7 @@ def compare_with_analysis(analysis_dir: str, names: List[str]) -> Dict:
     return res
 
 
-# ----------------------------------------------------------------------
 # Figures
-# ----------------------------------------------------------------------
 def plot_effects(tables: Dict[str, pd.DataFrame], names: List[str], path: str) -> None:
     keys = [
         ("deplacement_m", "Deplacement de trajectoire [m]\n(double difference si fenetre)"),
@@ -338,13 +290,7 @@ def _attribution(analysis_dir: str, names: List[str]):
 
 
 def plot_summary(tables: Dict[str, pd.DataFrame], names: List[str], analyses: Dict[str, str], path: str):
-    """
-    Une ligne par intervention :
-      gauche : ce qui s'est VRAIMENT passe (effet mesure en rejouant les memes vols) ;
-      droite : ce que l'analyse causale en deduit SANS connaitre l'intervention.
-    Si l'analyse a du sens, le drone touche a gauche est celui dont les
-    defaillances sont attribuees a la bonne cause a droite.
-    """
+    """Une ligne par intervention : a gauche l'effet mesure, a droite les causes trouvees par l'analyse."""
     rows = list(tables)
     fig, axes = plt.subplots(len(rows), 2, figsize=(12, 3.4 * len(rows)), squeeze=False)
     x = np.arange(len(names))
@@ -397,7 +343,6 @@ def plot_summary(tables: Dict[str, pd.DataFrame], names: List[str], analyses: Di
     plt.close(fig)
 
 
-# ----------------------------------------------------------------------
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--base", required=True, help="repertoire des vols de base")

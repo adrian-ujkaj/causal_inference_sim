@@ -1,58 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-causal_analysis.py : analyse causale des defaillances d'un essaim de drones simule.
+"""Analyse causale des defaillances d'un essaim de drones simule, sur plusieurs vols :
+graphe d'interactions NRI (Kipf et al. 2018), regression logistique, tests de Granger et
+propagation entre drones. Les causes candidates sont exogenes (vent, GNSS, manoeuvre du
+leader, voisins) ; la validation par intervention est dans causal_validation.py.
 
-Outils : Neural Relational Inference (NRI), regression logistique, tests de
-Granger, matrice de propagation des defaillances.
-
-Principes
----------
-1. Plusieurs vols. Un vol de 30 s ne permet aucune conclusion causale : on
-   charge un repertoire de vols (runs/.../s1, s2, ...), ou plusieurs campagnes.
-   Les fenetres d'apprentissage ne traversent jamais deux vols.
-
-2. Separation stricte entre DEFAILLANCES (a expliquer) et CAUSES CANDIDATES
-   (facteurs exogenes). Une defaillance n'est jamais expliquee par la variable
-   qui la definit, et les mediateurs (erreurs de suivi, de formation, de
-   navigation) ne sont pas des causes candidates.
-     Defaillances : perte de formation (suiveurs), degradation de navigation,
-                    quasi-collision.
-     Causes       : vent, erreur GNSS (a l'instant de mesure), manoeuvre du
-                    leader (pour ses suiveurs), voisins proches (graphe NRI).
-
-3. Seuils PHYSIQUES (metres, secondes), identiques pour tous les drones.
-
-4. Erreur de formation mesuree dans le repere du LEADER (la formation tourne
-   avec lui).
-
-5. NRI (Kipf et al., 2018) : le type d'arete 0 ne transmet aucun message, un
-   terme KL tire les aretes vers un a priori parcimonieux, les messages ne
-   voient que des grandeurs relatives, et le decodeur connait le passe propre
-   de chaque drone (sinon les suiveurs "predisent" le leader). L'importance
-   d'une arete est mesuree par permutation sur des vols NON vus.
-
-6. Tout est verifie quand c'est possible :
-   - graphe NRI compare a la structure connue de l'essaim (config.yaml) ;
-   - le graphe doit mieux predire que le meme modele sans aucune arete ;
-   - modeles d'evenements evalues par validation croisee PAR VOL, coefficients
-     avec intervalles de confiance (bootstrap par vol) ;
-   - propagation comparee a une hypothese nulle (decalage temporel).
-   La validation par INTERVENTION (provoquer une cause, mesurer son effet) est
-   dans analysis/causal_validation.py.
-
-Usage
------
     python analysis/causal_analysis.py --log_dir runs/mc --output_dir causal_out
     python analysis/causal_analysis.py --log_dir runs/base runs/gnss --output_dir out
-    python analysis/causal_analysis.py --log_dir logs --all_figures   # un seul vol
-
-Sorties : graphe_interactions.png, causes_defaillances.png, donnees/ (csv, json)
-et, avec --all_figures, details/ (cartes NRI, rapports de cotes, Granger,
-propagation).
-
-Reference : Kipf, Fetaya, Wang, Welling, Zemel, "Neural Relational Inference for
-Interacting Systems", ICML 2018.
+    python analysis/causal_analysis.py --log_dir logs --all_figures
 """
 
 from __future__ import annotations
@@ -95,19 +50,12 @@ except Exception:  # pragma: no cover
 
 OUTCOMES = ("formation_loss", "nav_degradation", "near_miss")
 FACTORS = ("wind", "gnss", "leader_maneuver", "interaction")
-# Cause candidate exclue pour une defaillance donnee, parce qu'elle est calculee a
-# partir des MEMES grandeurs que la defaillance : la pression des voisins est une
-# fonction des distances entre drones, qui definissent la quasi-collision et
-# l'ecart en formation. L'inclure revient a expliquer la defaillance par sa propre
-# definition (un premier essai donnait un rapport de cotes de 0.11 : un suiveur
-# hors de sa place est loin de ses voisins, ce n'est pas une cause). Elle reste
-# candidate pour la navigation, ou elle joue le role de CONTROLE NEGATIF.
+# La pression des voisins vient des memes distances que la quasi-collision et l'ecart en
+# formation, donc exclue pour ces deux-la. Pour la navigation elle sert de controle negatif.
 EXCLUDED_FACTORS = {"near_miss": {"interaction"}, "formation_loss": {"interaction"}}
 
 
-# ======================================================================
 # Utilitaires
-# ======================================================================
 
 
 def set_seed(seed: int) -> None:
@@ -117,7 +65,7 @@ def set_seed(seed: int) -> None:
 
 
 def set_torch_threads(n: int) -> None:
-    """Sur de petits tenseurs, beaucoup de threads PyTorch ralentit enormement."""
+    """Peu de threads : plus rapide sur de petits tenseurs."""
     n = int(max(1, n))
     try:
         torch.set_num_threads(n)
@@ -156,16 +104,14 @@ def yaw_from_quat(q: np.ndarray) -> np.ndarray:
     return np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
 
-# ======================================================================
 # Chargement des journaux
-# ======================================================================
 
 
 @dataclass
 class SwarmLogs:
     run_id: str
-    times: np.ndarray  # [T]
-    drone_names: List[str]  # [N]
+    times: np.ndarray
+    drone_names: List[str]
     data: Dict[str, np.ndarray]  # cle -> [T, N, d] ou [T, N]
     dt: float
     notes: List[str] = field(default_factory=list)
@@ -175,7 +121,6 @@ _MAIN_LOG = re.compile(r"^drone_\d+\.csv$")
 
 
 def _find_drone_logs(log_dir: str) -> List[str]:
-    """Journaux principaux drone_<n>.csv uniquement (pas *_filter.csv, *_truth.csv)."""
     return sorted(os.path.join(log_dir, f) for f in os.listdir(log_dir) if _MAIN_LOG.match(f))
 
 
@@ -201,11 +146,7 @@ def _asof(base_t: np.ndarray, df: pd.DataFrame, cols: List[str], direction: str 
 
 
 def load_run(run_dir: str, downsample: int = 1) -> SwarmLogs:
-    """
-    Charge un vol : journaux principaux alignes (puis sous-echantillonnes, dans
-    cet ordre), completes par les journaux du filtre (erreur de navigation,
-    erreur GNSS a l'instant de mesure) et de verite (lacet).
-    """
+    """Charge un vol : journaux principaux alignes, completes par ceux du filtre et de verite."""
     paths = _find_drone_logs(run_dir)
     notes: List[str] = []
     dfs, names = [], []
@@ -223,7 +164,7 @@ def load_run(run_dir: str, downsample: int = 1) -> SwarmLogs:
         common = np.intersect1d(common, df["time"].to_numpy())
     if len(common) < 20:
         raise ValueError(f"{run_dir} : trop peu d'instants communs ({len(common)})")
-    common = common[:: max(1, int(downsample))]  # aligner PUIS sous-echantillonner
+    common = common[:: max(1, int(downsample))]  # aligner avant de sous-echantillonner
     dfs = [df.set_index("time").loc[common].reset_index().ffill().bfill() for df in dfs]
     T, N = len(common), len(dfs)
     dt = float(np.median(np.diff(common)))
@@ -299,9 +240,7 @@ def load_runs(log_dir, downsample: int = 1) -> List[SwarmLogs]:
     return runs
 
 
-# ======================================================================
-# Structure connue de l'essaim (pour VERIFIER le graphe NRI)
-# ======================================================================
+# Structure connue de l'essaim (pour verifier le graphe NRI)
 
 
 @dataclass
@@ -312,11 +251,7 @@ class SwarmStructure:
     source: str
 
     def known_adjacency(self, n: int) -> np.ndarray:
-        """
-        A[i, j] (recepteur i, emetteur j) : 1 = influence attendue, 0 = aucune,
-        NaN = indetermine (suiveur <-> suiveur : separation, active seulement
-        quand ils se rapprochent).
-        """
+        """A[i, j] (recepteur i, emetteur j) : 1 influence attendue, 0 aucune, NaN entre suiveurs."""
         A = np.zeros((n, n))
         np.fill_diagonal(A, np.nan)
         if self.leader is not None:
@@ -345,25 +280,18 @@ def swarm_structure(config_path: Optional[str], names: List[str], leader_index: 
     return SwarmStructure(leader_index, others, [], "hypothese : leader_index, tous les autres suiveurs")
 
 
-# ======================================================================
 # Defaillances (variables a expliquer)
-# ======================================================================
 
 
 @dataclass
 class Outcomes:
     active: Dict[str, np.ndarray]  # [T, N] binaire, apres stabilisation
-    continuous: Dict[str, np.ndarray]  # [T, N] grandeur continue sous-jacente
-    applicable: Dict[str, np.ndarray]  # [N] booleen : la defaillance a-t-elle un sens pour ce drone ?
+    continuous: Dict[str, np.ndarray]
+    applicable: Dict[str, np.ndarray]  # [N] defaillance definie pour ce drone
 
 
 def formation_error(logs: SwarmLogs, st: SwarmStructure, settle_s: float) -> np.ndarray:
-    """
-    Ecart de chaque suiveur a sa place, dans le REPERE DU LEADER.
-    La place est la mediane de la position relative (repere leader) apres
-    stabilisation : c'est la formation que l'essaim tient reellement, ce qui
-    rend la mesure independante de la regle de formation utilisee.
-    """
+    """Ecart de chaque suiveur a sa place (mediane apres stabilisation), dans le repere du leader."""
     T, N = logs.data["pos"].shape[:2]
     err = np.zeros((T, N))
     if st.leader is None or not st.followers:
@@ -390,7 +318,6 @@ def compute_outcomes(logs: SwarmLogs, st: SwarmStructure, a: argparse.Namespace)
     T, N = logs.data["pos"].shape[:2]
 
     def k(sec):
-        """Duree [s] -> nombre de pas."""
         return max(1, int(round(sec / logs.dt)))
 
     settled = (logs.times >= a.settle_time)[:, None]
@@ -421,9 +348,7 @@ def compute_outcomes(logs: SwarmLogs, st: SwarmStructure, a: argparse.Namespace)
     return Outcomes(active=active, continuous=continuous, applicable=applicable)
 
 
-# ======================================================================
 # Causes candidates (facteurs exogenes)
-# ======================================================================
 
 
 def leader_maneuver(logs: SwarmLogs, st: SwarmStructure, smooth_s: float = 0.25) -> np.ndarray:
@@ -460,9 +385,7 @@ def compute_factors(logs: SwarmLogs, st: SwarmStructure, edge_probs: np.ndarray)
     }
 
 
-# ======================================================================
 # NRI (Kipf et al. 2018)
-# ======================================================================
 
 
 class MLP(nn.Module):
@@ -484,7 +407,7 @@ def edge_index(n: int):
 
 
 class NRIEncoder(nn.Module):
-    """Encodeur MLP de NRI : noeud -> arete -> noeud -> arete, sur la fenetre ENTIERE."""
+    """Encodeur MLP de NRI : noeud -> arete -> noeud -> arete, sur toute la fenetre."""
 
     def __init__(self, n_in, hidden, k, dropout=0.0):
         super().__init__()
@@ -508,20 +431,9 @@ class NRIEncoder(nn.Module):
 
 class NRIDecoder(nn.Module):
     """
-    Decodeur a passage de messages, qui predit la vitesse au pas suivant.
-
-    - Le type d'arete 0 ne produit AUCUN message : c'est une vraie "non-arete"
-      (skip_first de l'article).
-    - Un message j -> i ne voit que des grandeurs RELATIVES (position et vitesse
-      de j par rapport a i) : rien ne couple artificiellement deux drones
-      (un centrage sur l'essaim instant par instant le ferait).
-    - L'etat propre d'un noeud est sa vitesse, son altitude, son CAP et ses vitesses aux
-      `hist` pas precedents. Sans ce passe propre, la position des suiveurs (qui
-      suivent le leader avec retard) trahit la manoeuvre recente du leader : le
-      modele "decouvre" alors une influence suiveurs -> leader, predictive mais
-      pas causale (piege classique de la causalite au sens de Granger). Le cap
-      est necessaire pour la meme raison : la formation est orientee selon le
-      cap du leader, donc la position des suiveurs revele ce cap.
+    Decodeur a passage de messages qui predit la vitesse au pas suivant. Le type 0 n'envoie
+    aucun message (skip_first) et un message j -> i ne voit que des grandeurs relatives.
+    Le cap et les vitesses passees du noeud evitent que les suiveurs servent a predire le leader.
     """
 
     def __init__(self, u_dim, hidden, k, dropout=0.0, hist=2):
@@ -545,18 +457,7 @@ class NRIDecoder(nn.Module):
         self.hidden = hidden
 
     def forward(self, x, u, z, send, recv, perm_edge=None, perm_idx=None, vh=None):
-        """
-        x : [B, N, 8] = position (3), vitesse (3), cos/sin du cap, a l'echelle.
-        vh : [B, N, 3*hist] vitesses propres aux pas precedents.
-        perm_edge / perm_idx : pour l'importance par permutation, les grandeurs
-        RELATIVES de l'arete perm_edge (vitesse et position de l'emetteur par
-        rapport au recepteur) sont prises dans une autre fenetre (perm_idx),
-        l'arete et son poids restant inchanges. On permute les grandeurs
-        relatives et non l'etat absolu de l'emetteur : un etat absolu pris a un
-        autre instant placerait l'emetteur a des dizaines de metres, ecart
-        relatif jamais vu a l'entrainement : l'"importance" mesurerait alors la
-        sensibilite du decodeur hors distribution, pas l'information utilisee.
-        """
+        """x : [B, N, 8] (position, vitesse, cos/sin du cap), vh : [B, N, 3*hist] vitesses passees."""
         B, N, _ = x.shape
         p, v, head = x[..., :3], x[..., 3:6], x[..., 6:8]
         rel = torch.cat([v[:, send] - v[:, recv], p[:, send] - p[:, recv]], -1)
@@ -572,25 +473,17 @@ class NRIDecoder(nn.Module):
 
 @dataclass
 class NRIResults:
-    edge_probs: np.ndarray  # [N, N] moyenne sur les graines de 1 - p(type 0)
-    edge_probs_std: np.ndarray  # [N, N] ecart-type entre graines
-    importance: np.ndarray  # [N, N] hausse relative de l'erreur de i, etat de j permute
+    edge_probs: np.ndarray  # [N, N] 1 - p(type 0), moyenne sur les graines
+    edge_probs_std: np.ndarray
+    importance: np.ndarray  # [N, N] hausse relative de l'erreur de i quand j est permute
     importance_std: np.ndarray
     loss_curves: List[List[float]]
-    heldout: Dict[str, float]  # MSE vols non vus : avec graphe / sans aretes
-    validation: Dict[str, object]  # comparaison au graphe connu
+    heldout: Dict[str, float]  # MSE sur vols non vus, avec / sans aretes
+    validation: Dict[str, object]
 
 
 def nri_dataset(runs: List[SwarmLogs], nri_dt: float, settle_s: float = 0.0):
-    """
-    Par vol : x = [position, vitesse, cos cap, sin cap] [T, N, 8] et
-    u = [vent, erreur GNSS] [T, N, 4].
-    La position est centree par une CONSTANTE propre au vol (pas par le centre de
-    l'essaim instant par instant, qui couplerait les drones entre eux).
-    Le decollage est exclu : tous les drones partent au meme instant, et cette
-    horloge commune ferait "predire" la montee d'un drone independant par celle
-    des autres (cause commune, pas interaction).
-    """
+    """Par vol : x [T, N, 8] (position, vitesse, cos/sin cap) et u [T, N, 4] (vent, GNSS), sans decollage."""
     out = []
     for r in runs:
         step = max(1, int(round(nri_dt / r.dt)))
@@ -628,9 +521,7 @@ def _gumbel(logits, tau, hard=False):
     y = F.softmax((logits + g) / tau, dim=-1)
     if not hard:
         return y
-    # Straight-through : aretes discretes en avant, gradient de la version douce.
-    # Le decodeur apprend alors avec des aretes PRESENTES OU ABSENTES, ce qui
-    # rend la lecture du graphe interpretable.
+    # Straight-through : aretes discretes en avant, gradient de la version douce
     y_hard = torch.zeros_like(y).scatter_(-1, y.argmax(-1, keepdim=True), 1.0)
     return (y_hard - y).detach() + y
 
@@ -642,14 +533,12 @@ def train_nri_once(train, test, n, a, seed):
     S_dim, U_dim = train[0][0].shape[-1], train[0][1].shape[-1]
     x_all = np.concatenate([x.reshape(-1, S_dim) for x, _ in train])
     u_all = np.concatenate([u.reshape(-1, U_dim) for _, u in train])
-    # Echelles ISOTROPES (un scalaire pour les positions, un pour les vitesses) :
-    # la geometrie relative entre drones est conservee.
+    # Echelles isotropes pour garder la geometrie relative entre drones
     sp, sv = float(x_all[:, :3].std()) or 1.0, float(x_all[:, 3:6].std()) or 1.0
     scale = np.array([sp] * 3 + [sv] * 3 + [1.0] * (S_dim - 6), dtype=np.float32)
     su = StandardScaler().fit(u_all)
 
     def norm(d):
-        """Mise a l'echelle commune (statistiques des vols d'entrainement seulement)."""
         return [
             (
                 (x / scale).astype(np.float32),
@@ -703,11 +592,11 @@ def train_nri_once(train, test, n, a, seed):
     enc.eval()
     dec.eval()
     with torch.no_grad():
-        # Aretes : moyenne de p(type) sur des fenetres d'apprentissage
+        # Aretes moyennes sur des fenetres d'apprentissage
         b = torch.from_numpy(rng.randint(0, Sw.shape[0], min(1024, Sw.shape[0])))
         ctx = Sw[b][:, :L].permute(0, 2, 1, 3).reshape(len(b), n, -1)
-        q = F.softmax(enc(ctx, send, recv, n), -1).mean(0).numpy()  # [E, K]
-        # Prediction sur des vols NON vus, avec le graphe infere puis sans aucune arete
+        q = F.softmax(enc(ctx, send, recv, n), -1).mean(0).numpy()
+        # Vols non vus : graphe infere, puis aucune arete
         mse_g, mse_0 = float("nan"), float("nan")
         D = np.full((n, n), np.nan)
         if test_n:
@@ -718,16 +607,12 @@ def train_nri_once(train, test, n, a, seed):
             if a.hard_edges:  # meme regime qu'a l'apprentissage
                 zq = torch.zeros_like(zq).scatter_(-1, zq.argmax(-1, keepdim=True), 1.0)
             s_t, u_t, tgt, vh = St[:, L - 1], Ut[:, L - 1], St[:, L, :, 3:6], hist(St)
-            err_g = ((dec(s_t, u_t, zq, send, recv, vh=vh) - tgt) ** 2).mean(dim=(0, 2))  # [N] par noeud
+            err_g = ((dec(s_t, u_t, zq, send, recv, vh=vh) - tgt) ** 2).mean(dim=(0, 2))
             mse_g = float(err_g.mean())
             z0 = torch.zeros_like(zq)
             z0[..., 0] = 1.0
             mse_0 = float(F.mse_loss(dec(s_t, u_t, z0, send, recv, vh=vh), tgt))
-            # Importance par PERMUTATION de l'arete j -> i : on garde l'arete, mais
-            # l'etat de j est pris dans une autre fenetre tiree au hasard. Si le
-            # message portait de l'information sur j, l'erreur de prediction de i
-            # augmente ; s'il ne servait que de biais (nombre de messages recus),
-            # elle ne bouge pas. Retirer l'arete (ablation) confondait ces deux cas.
+            # Importance de j -> i : grandeurs relatives de j prises dans une autre fenetre
             g = torch.Generator().manual_seed(seed + 7)
             reps = 5
             for e, (j, i) in enumerate(zip(send.numpy(), recv.numpy())):
@@ -775,7 +660,6 @@ def run_nri(runs: List[SwarmLogs], st: SwarmStructure, a: argparse.Namespace) ->
     set_torch_threads(a.torch_threads)
     n = len(runs[0].drone_names)
     data = nri_dataset(runs, a.nri_dt, a.settle_time)
-    # Vols de test : environ 20 % (au moins 1 si au moins 2 vols)
     n_test = max(1, len(data) // 5) if len(data) >= 2 else 0
     test, train = data[:n_test], data[n_test:]
     Ps, Ds, curves, hg, h0 = [], [], [], [], []
@@ -808,18 +692,11 @@ def run_nri(runs: List[SwarmLogs], st: SwarmStructure, a: argparse.Namespace) ->
     return NRIResults(P, Pstd, D, Dstd, curves, heldout, val)
 
 
-# ======================================================================
-# Influence signee (heuristique, conservee mais rendue prudente)
-# ======================================================================
+# Influence signee (heuristique)
 
 
 def signed_influence(runs: List[SwarmLogs], P: np.ndarray, thresh: float) -> np.ndarray:
-    """
-    Signe de l'influence j -> i : correlation entre l'acceleration de i, PRIVEE de
-    l'acceleration moyenne de l'essaim (mode commun : tout le monde suit le meme
-    plan), et la direction de j vu de i. +1 attraction, -1 repulsion, 0 si la
-    statistique n'est pas significative (|t| < 2) ou si l'arete est faible.
-    """
+    """Signe de j -> i (+1 attraction, -1 repulsion, 0 si |t| < 2 ou arete faible), hors mode commun."""
     n = P.shape[0]
     num = np.zeros((n, n))
     cnt = np.zeros((n, n))
@@ -848,9 +725,7 @@ def signed_influence(runs: List[SwarmLogs], P: np.ndarray, thresh: float) -> np.
     return out
 
 
-# ======================================================================
 # Modeles d'evenements (regression logistique) et attribution des causes
-# ======================================================================
 
 
 def _past_mean(x: np.ndarray, w: int) -> np.ndarray:
@@ -862,12 +737,7 @@ def _past_mean(x: np.ndarray, w: int) -> np.ndarray:
 
 
 def build_event_table(runs, outs, facs, st, a):
-    """
-    Une ligne = (vol, instant, drone) ou l'on predit l'APPARITION d'une defaillance
-    a partir des causes moyennees sur l'horizon passe. On ne garde que les instants
-    ou la defaillance n'etait pas deja active sur cet horizon : sinon le modele
-    apprend que "la defaillance d'avant predit celle de maintenant".
-    """
+    """Une ligne par (vol, instant, drone) sans defaillance sur l'horizon passe ; causes moyennees dessus."""
     rows = {ev: [] for ev in OUTCOMES}
     for ri, (r, o, fx) in enumerate(zip(runs, outs, facs)):
         w = max(1, int(round(a.horizon / r.dt)))
@@ -896,7 +766,7 @@ def build_event_table(runs, outs, facs, st, a):
 
 @dataclass
 class EventResults:
-    metrics: Dict[str, Dict]  # par defaillance
+    metrics: Dict[str, Dict]
     attribution: Dict[str, Dict[str, List[float]]]  # defaillance -> cause -> [N] parts moyennes
     instances: List[Dict]
 
@@ -922,7 +792,7 @@ def fit_event_models(tables, names, a) -> EventResults:
         y = df["y"].to_numpy(int)
         groups = df["run"].to_numpy()
 
-        # --- Validation croisee PAR VOL : performance sur des vols non vus ---
+        # Validation croisee par vol
         uniq = np.unique(groups)
         pred = np.full(len(y), np.nan)
         if len(uniq) >= 2:
@@ -941,7 +811,7 @@ def fit_event_models(tables, names, a) -> EventResults:
                 brier_score_loss(y[ok], np.full(ok.sum(), y[ok].mean()))
             )
 
-        # --- Modele final + intervalles de confiance par bootstrap sur les vols ---
+        # Modele final, IC par bootstrap sur les vols
         clf = LogisticRegression(max_iter=2000).fit(Xs, y)
         coef = clf.coef_[0]
         boots = []
@@ -961,8 +831,7 @@ def fit_event_models(tables, names, a) -> EventResults:
             for k, f in enumerate(feats)
         }
 
-        # --- Attribution par apparition : parts POSITIVES normalisees par leur somme ---
-        # (une softmax donnerait 25 % a chaque cause meme quand aucune n'a d'effet)
+        # Parts des contributions positives
         contrib = np.maximum(Xs * coef[None, :], 0.0)
         tot = contrib.sum(axis=1)
         pos = np.where(y == 1)[0]
@@ -1001,13 +870,10 @@ def fit_event_models(tables, names, a) -> EventResults:
     return EventResults(metrics, attribution, instances)
 
 
-# ======================================================================
-# Granger (sur des grandeurs continues, avec correction de Bonferroni)
-# ======================================================================
+# Granger
 
 
 def _granger_tests(z: np.ndarray, maxlag: int):
-    """grangercausalitytests, compatible avant/apres statsmodels 0.15 (argument verbose retire)."""
     try:
         return grangercausalitytests(z, maxlag=maxlag, verbose=False)
     except TypeError:
@@ -1015,12 +881,7 @@ def _granger_tests(z: np.ndarray, maxlag: int):
 
 
 def granger(runs, outs, facs, st, a) -> pd.DataFrame:
-    """
-    La cause candidate x aide-t-elle a predire la grandeur continue y, au-dela du
-    passe de y ? Teste par vol et par drone, a ~5 Hz, retards jusqu'a 1 s.
-    Seuil de Bonferroni sur l'ensemble des tests. Les cas degeneres (serie
-    constante, trop courte, echec numerique) sont marques, pas convertis en "0".
-    """
+    """Test de Granger cause -> grandeur continue, par vol et par drone, seuil de Bonferroni global."""
     recs = []
     n_tests = 0
     for r, o, fx in zip(runs, outs, facs):
@@ -1066,21 +927,11 @@ def granger(runs, outs, facs, st, a) -> pd.DataFrame:
     return df
 
 
-# ======================================================================
 # Impact systemique (contre une hypothese nulle)
-# ======================================================================
 
 
 def systemic_impact(runs, outs, a, rng):
-    """
-    impact[i, j] = P(nouvelle defaillance de j dans ]t, t+H] | defaillance de i
-    apparait en t) - meme probabilite sous l'hypothese nulle.
-
-    Nulle : on decale circulairement les instants d'apparition de i d'une duree
-    aleatoire (meme vol, meme nombre d'evenements, structure temporelle de j
-    intacte). Les deux probabilites portent sur la meme fenetre, sinon la
-    difference serait biaisee vers le positif.
-    """
+    """impact[i, j] = P(defaillance de j dans ]t, t+H] | apparition chez i en t) - P avec t decale au hasard."""
     n = len(runs[0].drone_names)
     any_on = []
     for o in outs:
@@ -1100,7 +951,6 @@ def systemic_impact(runs, outs, a, rng):
             csum = np.vstack([np.zeros((1, n)), np.cumsum(tgt, axis=0)])
 
             def hit(tt, csum=csum, H=H, T=T):
-                """Pour chaque instant tt : au moins une nouvelle defaillance dans ]tt, tt + H] ?"""
                 return (csum[np.minimum(tt + H + 1, T)] - csum[np.minimum(tt + 1, T)]) > 0
 
             for i in range(n):
@@ -1123,9 +973,7 @@ def systemic_impact(runs, outs, a, rng):
     return result
 
 
-# ======================================================================
 # Figures
-# ======================================================================
 
 
 def heatmap(mat, title, xl, yl, xt, yt, path, vmin=None, vmax=None, annot=None, cmap="viridis"):
@@ -1217,7 +1065,6 @@ def _plot_nri_details(res, names, out, ann, v, auc):
 
 
 def _swarm_layout(A, names):
-    """Leader en haut, suiveurs en dessous, drones independants a l'ecart a droite."""
     n = len(names)
     A0 = np.nan_to_num(A, nan=0.0)
     leaders = [j for j in range(n) if A0[:, j].sum() > 0]
@@ -1236,7 +1083,6 @@ def _swarm_layout(A, names):
 
 
 def _plot_graph(res, A, names, out, imp_thresh):
-    """Qui influence qui : aretes NRI retenues, colorees selon la structure connue."""
     n = len(names)
     W = res.importance if np.isfinite(res.importance).any() else res.edge_probs
     G = nx.DiGraph()
@@ -1272,7 +1118,7 @@ def _plot_graph(res, A, names, out, imp_thresh):
             node_size=1900,
         )
         lab = {(u, v): f"+{100 * G[u][v]['w']:.0f}%" for u, v in G.edges()}
-        try:  # networkx >= 3.2 : etiquettes sur les arcs courbes (sinon superposees)
+        try:  # connectionstyle accepte a partir de networkx 3.2
             nx.draw_networkx_edge_labels(G, pos, lab, font_size=8, ax=ax, connectionstyle="arc3,rad=0.12")
         except TypeError:
             nx.draw_networkx_edge_labels(G, pos, lab, font_size=8, ax=ax)
@@ -1333,10 +1179,7 @@ OUTCOME_LABELS = {
 
 
 def plot_causes(ev: "EventResults", names, out, title_suffix=""):
-    """
-    Une barre par drone : part de chaque cause dans ses defaillances, une
-    sous-figure par type de defaillance (seulement s'il y en a assez pour un modele).
-    """
+    """Part de chaque cause dans les defaillances de chaque drone, une sous-figure par defaillance."""
     evs = [e for e in OUTCOMES if e in ev.attribution]
     if not evs:
         fig, ax = plt.subplots(figsize=(6, 2))
@@ -1402,9 +1245,7 @@ def plot_event_models(ev: EventResults, out):
     plt.close(fig)
 
 
-# ======================================================================
 # Pipeline
-# ======================================================================
 
 
 def _json(o):
@@ -1418,7 +1259,6 @@ def _json(o):
 
 
 def _plot_details(a, out, names, signed, ev, gr, imp):
-    """Figures detaillees (option --all_figures), dans le sous-dossier details/."""
     heatmap(
         signed,
         "Influence signee j -> i (+ attraction, - repulsion, 0 non significatif)",
@@ -1511,8 +1351,7 @@ def run_pipeline(a: argparse.Namespace) -> Dict:
         f"MSE vols non vus avec/sans graphe = {nri.heldout['mse_avec_graphe']:.4f} / "
         f"{nri.heldout['mse_sans_aretes']:.4f}"
     )
-    # Aretes retenues : importance par permutation (les probabilites de l'encodeur
-    # sont comprimees par l'a priori parcimonieux : un seuil absolu n'y a pas de sens).
+    # Aretes retenues par importance : l'a priori parcimonieux comprime les probabilites
     W = nri.importance if np.isfinite(nri.importance).any() else nri.edge_probs
     signed = signed_influence(runs, W, a.importance_thresh if W is nri.importance else a.graph_thresh)
 
@@ -1522,9 +1361,9 @@ def run_pipeline(a: argparse.Namespace) -> Dict:
     gr = granger(runs, outs, facs, st, a)
     imp = systemic_impact(runs, outs, a, np.random.RandomState(a.seed))
 
-    # ------------------------- sorties -------------------------
+    # Sorties
     out = a.output_dir
-    dat = os.path.join(out, "donnees")  # chiffres bruts (csv / json)
+    dat = os.path.join(out, "donnees")
     ensure_dir(dat)
     pd.DataFrame(nri.edge_probs, index=names, columns=names).to_csv(os.path.join(dat, "nri_edge_probs.csv"))
     pd.DataFrame(nri.edge_probs_std, index=names, columns=names).to_csv(
@@ -1567,7 +1406,7 @@ def run_pipeline(a: argparse.Namespace) -> Dict:
         pd.DataFrame(d["impact"], index=names, columns=names).to_csv(os.path.join(dat, f"impact_{e}.csv"))
         pd.DataFrame(d["p"], index=names, columns=names).to_csv(os.path.join(dat, f"impact_{e}_pvalues.csv"))
 
-    # ------------------------- figures -------------------------
+    # Figures
     A = st.known_adjacency(n)
     det = os.path.join(out, "details") if a.all_figures else None
     if det:

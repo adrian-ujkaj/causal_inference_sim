@@ -1,39 +1,12 @@
 #!/usr/bin/env python3
 """
-Validation statistique du filtre de navigation, en boucle fermee (Monte-Carlo
-de simulations PyBullet completes).
-
-Ce module repond a la question qu'une courbe superposee ne permet pas de
-trancher : "le filtre est-il juste, et son incertitude annoncee est-elle
-credible ?". Il produit les indicateurs d'une note de performance de navigation.
-
-1. RMSE position et vitesse, compare au RMSE du GNSS brut.
-   Le ratio RMSE_GNSS / RMSE_filtre est le gain apporte par l'hybridation.
-
-2. Enveloppe 3-sigma : l'erreur reelle doit rester dans +/- 3 sigma (diagonale
-   de P) environ 99.7 % du temps.
-
-3. NEES (Normalized Estimation Error Squared), e^T P^-1 e.
-   Moyenne attendue = dimension de l'etat. On calcule :
-     - le NEES position-vitesse (dim 6) pour les deux filtres, comparable ;
-     - le NEES complet (dim 15) pour l'ESKF, attitude et biais compris.
-   Au-dessus : filtre trop confiant ; en dessous : trop prudent.
-   Il exige la verite terrain : il n'est calculable qu'en simulation.
-
-4. NIS (Normalized Innovation Squared), y^T S^-1 y, dim 6.
-   Meme logique sur l'innovation, SANS verite terrain : c'est l'indicateur qui
-   reste disponible en vol reel (surveillance d'integrite).
-
-Les bornes affichees sont les quantiles chi2 a 1 % et 99 % de la moyenne de N
-echantillons, chi2(N*ddl)/N. Attention : les echantillons successifs d'un meme
-vol sont correles, ces bornes sont donc OPTIMISTES (trop etroites). On les
-donne a titre indicatif ; l'ecart relatif a l'attendu est plus parlant.
+Validation statistique du filtre de navigation par Monte-Carlo de simulations PyBullet
+completes : RMSE compare au GNSS brut, enveloppe 3-sigma, NEES (dim 6 et 15) et NIS.
+Les bornes chi2 sont trop etroites car les echantillons d'un meme vol sont correles.
 
 Usage :
     python analysis/filter_validation.py --runs 30 --tmax 20
-    python analysis/filter_validation.py --runs 30 --filter kf6
-    python analysis/filter_validation.py --runs 30 --imu-preset mems_nav
-    python analysis/filter_validation.py --runs 30 --outage 8 18
+    python analysis/filter_validation.py --runs 30 --filter kf6 --outage 8 18
     python analysis/filter_validation.py --logs runs/mc --no-sim
 """
 
@@ -67,9 +40,6 @@ if REPO not in sys.path:
 PV_DIM, FULL_DIM, MEAS_DIM = 6, 15, 6
 
 
-# ----------------------------------------------------------------------
-# Execution des tirages Monte-Carlo
-# ----------------------------------------------------------------------
 _RUNNER_SRC = '''
 import os, sys, json, signal, yaml
 # Un arret par `timeout` (SIGTERM) sautait le bloc finally et les journaux en
@@ -154,12 +124,7 @@ def run_monte_carlo(
     seed0: int = 1,
     agent_override: dict | None = None,
 ) -> str:
-    """
-    Lance n_runs simulations headless, une graine par tirage.
-
-    Chaque tirage tourne dans sa propre copie du projet, et les ports ZMQ sont
-    decales : deux simulations simultanees ne partagent ni fichier ni port.
-    """
+    """Lance n_runs simulations headless, chacune dans sa copie du projet avec des ports ZMQ decales."""
     os.makedirs(out_dir, exist_ok=True)
     preset = None
     if imu_preset:
@@ -231,15 +196,12 @@ def run_monte_carlo(
     return out_dir
 
 
-# ----------------------------------------------------------------------
-# Indicateurs
-# ----------------------------------------------------------------------
 def chi2_bounds(dim: int, n: int, p: float = 0.01) -> tuple[float, float]:
     """Bornes a p et 1-p de la moyenne de n variables chi2 a `dim` ddl."""
     n = max(int(n), 1)
     if not HAVE_SCIPY:
         s = np.sqrt(2.0 * dim / n)
-        # p = 0.01 de chaque cote (intervalle a 98 %) -> z = 2.326, pas 2.576
+        # p = 0.01 de chaque cote (intervalle a 98 %) -> z = 2.326
         return dim - 2.326 * s, dim + 2.326 * s
     return chi2.ppf(p, dim * n) / n, chi2.ppf(1 - p, dim * n) / n
 
@@ -261,7 +223,7 @@ def collect(log_root: str) -> dict[str, pd.DataFrame]:
             if os.path.exists(main):
                 mdf = pd.read_csv(main)
                 if not mdf.empty:
-                    # Log principal plus grossier : plus proche voisin temporel
+                    # Journal principal moins frequent : plus proche voisin en temps
                     fdf = pd.merge_asof(
                         fdf.sort_values("time"),
                         mdf[["time", "gnss_error_mag"]].sort_values("time"),
@@ -286,18 +248,14 @@ def report(per_drone: dict[str, pd.DataFrame], skip: float = 2.0) -> pd.DataFram
         e_pos = _norm(d, ["e_px", "e_py", "e_pz"])
         e_vel = _norm(d, ["e_vx", "e_vy", "e_vz"])
         avail = np.asarray(avail, dtype=bool)
-        # Erreur GNSS de reference : a l'instant EXACT de chaque mesure
-        # (colonne gnss_err du journal du filtre). Le journal principal garde la
-        # derniere mesure entre deux mises a jour a 10 Hz : la comparer a la
-        # position courante ajoute un terme vitesse x age et surestime l'erreur
-        # GNSS (~30 %), donc le gain apparent du filtre.
+        # Erreur GNSS a l'instant de la mesure
         if "gnss_err" in d and d.gnss_err.notna().any():
             gn = d.loc[d.gnss_update == 1, "gnss_err"].dropna()
             gnss_src = "instant de mesure"
         else:
             gn = d.loc[avail, "gnss_error_mag"] if "gnss_error_mag" in d else pd.Series(dtype=float)
             gnss_src = "journal principal (SURESTIME : mesure maintenue)"
-        # Tous les indicateurs sur les memes echantillons : hors coupure GNSS
+        # Indicateurs sur les memes echantillons, hors coupure GNSS
         da = d[avail]
         with np.errstate(invalid="ignore"):
             out = np.abs(da[["e_px", "e_py", "e_pz"]].to_numpy()) > 3 * np.maximum(
@@ -378,9 +336,6 @@ def report(per_drone: dict[str, pd.DataFrame], skip: float = 2.0) -> pd.DataFram
     return R
 
 
-# ----------------------------------------------------------------------
-# Figures
-# ----------------------------------------------------------------------
 def figures(
     per_drone: dict[str, pd.DataFrame], out_dir: str, drone: str | None = None, outage=None
 ) -> list[str]:
@@ -399,7 +354,7 @@ def figures(
         if outage:
             ax.axvspan(outage[0], outage[1], color="0.85", zorder=0, label="coupure GNSS")
 
-    # --- Figure 1 : erreur et enveloppe 3-sigma, un tirage ---
+    # Erreur et enveloppe 3-sigma, un tirage
     fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
     for ax, a in zip(axes, "xyz"):
         shade(ax)
@@ -425,7 +380,7 @@ def figures(
     plt.close(fig)
     paths.append(p1)
 
-    # --- Figure 2 : NEES et NIS moyens, tous tirages ---
+    # NEES et NIS moyens sur tous les tirages
     g = df.groupby(df.time.round(2))
     has_full = "nees_full" in df and df.nees_full.notna().any()
     fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
@@ -457,7 +412,7 @@ def figures(
     plt.close(fig)
     paths.append(p2)
 
-    # --- Figure 3 : faisceau Monte-Carlo de l'erreur de position ---
+    # Faisceau Monte-Carlo de l'erreur de position
     fig, ax = plt.subplots(figsize=(10, 5))
     shade(ax)
     err = _norm(df, ["e_px", "e_py", "e_pz"])
@@ -480,7 +435,6 @@ def figures(
     return paths
 
 
-# ----------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--runs", type=int, default=30, help="nombre de tirages")
